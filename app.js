@@ -1,256 +1,343 @@
 /**
- * MLB Tracker - Client Side Logic
+ * MLB Tracker V2 - Client Side Logic
  */
 
-// Constants
-const MOCK_DATE = "2026-03-26"; // Used to simulate Opening Day when testing
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1XTmkD-ms9UpE2KVNgp7eEOszJ5MX8oq_rUZ2tyuSlqI/export?format=csv";
 const STATS_API_BASE = "https://statsapi.mlb.com/api/v1";
 
+function getLocalDateString(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // State
-let myTeams = [];
-let upcomingGames = [];
+let myUnseenTeams = []; 
+let allTeamsDetailed = []; // From standings
+let gamesData = { today: [], tomorrow: [], dayafter: [] };
+let activeTab = 'today';
+let filters = { bothUnseen: false, featured: false };
 
-// DOM Elements
-const statusIndicator = document.getElementById('status-indicator');
-const statusText = document.getElementById('status-text');
-const teamsContainer = document.getElementById('teams-container');
-const teamCount = document.getElementById('team-count');
-const gamesContainer = document.getElementById('games-container');
-const dateRangeEl = document.getElementById('date-range');
+// DOM Maps
+const dom = {
+    syncStatus: document.getElementById('sync-status'),
+    btnSync: document.getElementById('btn-sync'),
+    btnRefresh: document.getElementById('btn-refresh'),
+    metricSeen: document.getElementById('metric-seen'),
+    metricRemaining: document.getElementById('metric-remaining'),
+    metricPercent: document.getElementById('metric-percent'),
+    metric3Day: document.getElementById('metric-3day'),
+    metricBoth: document.getElementById('metric-both'),
+    metricToday: document.getElementById('metric-today'),
+    metricFuture: document.getElementById('metric-future'),
+    gamesContainer: document.getElementById('games-container'),
+    divisionsContainer: document.getElementById('divisions-container'),
+    sidebarRemaining: document.getElementById('sidebar-remaining'),
+    sidebarCount: document.getElementById('sidebar-count')
+};
 
-// Initialize App
 async function init() {
+    setupListeners();
+    await loadEverything();
+}
+
+function updateStatus(state, text) {
+    dom.syncStatus.innerHTML = `<span class="status-dot ${state}"></span><span class="status-text">${text}</span>`;
+}
+
+async function loadEverything() {
     try {
-        updateStatus('loading', 'Fetching my teams...');
-        await fetchTeams();
-        renderTeams();
+        updateStatus('loading', 'Syncing Sheet...');
+        await fetchGoogleSheetTeams();
         
-        updateStatus('loading', 'Fetching live MLB games...');
-        await fetchGames();
+        updateStatus('loading', 'Loading Teams...');
+        loadStaticTeams();
+        
+        updateStatus('loading', 'Loading Schedule...');
+        await fetchSchedule();
+        
+        renderSidebar();
+        renderMetrics();
+        renderTabs();
         renderGames();
         
         updateStatus('ready', 'Live synced');
-    } catch (error) {
-        console.error("Initialization error:", error);
-        updateStatus('error', 'Error syncing data');
-        gamesContainer.innerHTML = `<div class="error-msg">Failed to load data: ${error.message}</div>`;
-        teamsContainer.innerHTML = `<div class="error-msg">Failed to load teams</div>`;
+    } catch (e) {
+        console.error(e);
+        updateStatus('error', 'Sync failed');
     }
 }
 
-// Update Header Status
-function updateStatus(state, text) {
-    statusIndicator.className = `status-indicator status-${state}`;
-    statusText.textContent = text;
+function setupListeners() {
+    dom.btnRefresh.addEventListener('click', loadEverything);
+    dom.btnSync.addEventListener('click', loadEverything);
+    
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            const target = e.currentTarget;
+            target.classList.add('active');
+            activeTab = target.dataset.tab;
+            renderGames();
+        });
+    });
+
+    document.getElementById('filter-unseen').addEventListener('click', (e) => {
+        filters.bothUnseen = !filters.bothUnseen;
+        e.currentTarget.classList.toggle('active');
+        renderGames();
+    });
+
+    document.getElementById('filter-broadcasts').addEventListener('click', (e) => {
+        filters.featured = !filters.featured;
+        e.currentTarget.classList.toggle('active');
+        renderGames();
+    });
 }
 
-// 1. Fetch Google Sheets CSV
-async function fetchTeams() {
-    const response = await fetch(SHEET_URL);
-    if (!response.ok) throw new Error("Failed to fetch Google Sheet");
-    const csvText = await response.text();
+// 1. Google Sheets -> Unseen Teams
+async function fetchGoogleSheetTeams() {
+    const res = await fetch(SHEET_URL);
+    if (!res.ok) throw new Error("Sheet fetch failed");
+    const csv = await res.text();
+    const lines = csv.split('\n').filter(l => l.trim().length > 0);
+    lines.shift(); // shift header
     
-    // Parse CSV: split by line, skip header, get column N (index 13)
-    const lines = csvText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const header = lines.shift(); // Remove header row
-    
-    const teams = new Set();
+    myUnseenTeams = [];
     for (const line of lines) {
-        // Simple distinct column splitting (assuming no complex commas in team names)
-        const cols = line.split(',');
-        if (cols.length > 13) {
-            let team = cols[13].trim();
-            // Remove quotes if present
-            if (team.startsWith('"') && team.endsWith('"')) {
-                team = team.substring(1, team.length - 1);
-            }
-            if (team) {
-                teams.add(team);
+        const cols = [];
+        let cur = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            if (line[i] === '"') {
+                inQuotes = !inQuotes;
+            } else if (line[i] === ',' && !inQuotes) {
+                cols.push(cur);
+                cur = '';
+            } else {
+                cur += line[i];
             }
         }
+        cols.push(cur);
+        
+        if (cols.length > 13 && cols[13].trim()) {
+            myUnseenTeams.push(cols[13].trim());
+        }
     }
-    
-    myTeams = Array.from(teams).sort();
-    console.log("My Teams loaded:", myTeams);
 }
 
-// 2. Render Teams Sidebar
-function renderTeams() {
-    teamCount.textContent = myTeams.length;
-    if (myTeams.length === 0) {
-        teamsContainer.innerHTML = `<div class="team-pill" style="opacity: 0.6">No teams tracked</div>`;
-        return;
-    }
+// 2. Load 30 Teams Statically
+function loadStaticTeams() {
+    const MLB_TEAMS_STATIC = {
+        "AL East": ["Orioles", "Red Sox", "Yankees", "Rays", "Blue Jays"],
+        "AL Central": ["White Sox", "Guardians", "Tigers", "Royals", "Twins"],
+        "AL West": ["Astros", "Angels", "Athletics", "Mariners", "Rangers"],
+        "NL East": ["Braves", "Marlins", "Mets", "Phillies", "Nationals"],
+        "NL Central": ["Cubs", "Reds", "Brewers", "Pirates", "Cardinals"],
+        "NL West": ["Diamondbacks", "Rockies", "Dodgers", "Padres", "Giants"]
+    };
     
-    teamsContainer.innerHTML = myTeams.map(team => `
-        <div class="team-pill">
-            <span class="team-dot" style="width:8px; height:8px; border-radius:50%; background:var(--accent-blue)"></span>
-            ${team}
-        </div>
-    `).join('');
+    allTeamsDetailed = [];
+    for (const [div, teams] of Object.entries(MLB_TEAMS_STATIC)) {
+        teams.forEach(tName => {
+            allTeamsDetailed.push({
+                name: tName,
+                division: div,
+                unseen: isTeamMatch(tName)
+            });
+        });
+    }
 }
 
-// 3. Fetch MLB API Games
-async function fetchGames() {
-    // Generate dates: today to today + 3 days
-    // Using MOCK_DATE for testing purposes as real games start Mar 26
-    const startDate = new Date(MOCK_DATE);
-    const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + 3);
+// 3. Schedule -> 3 Day Window
+async function fetchSchedule() {
+    const today = new Date();
+    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+    const dayAfter = new Date(today); dayAfter.setDate(today.getDate() + 2);
+
+    const d0Str = getLocalDateString(today);
+    const d1Str = getLocalDateString(tomorrow);
+    const d2Str = getLocalDateString(dayAfter);
     
-    const formatDate = (date) => date.toISOString().split('T')[0];
-    const startStr = formatDate(startDate);
-    const endStr = formatDate(endDate);
+    const url = `${STATS_API_BASE}/schedule?sportId=1&startDate=${d0Str}&endDate=${d2Str}&hydrate=probablePitcher,broadcasts`;
+    const res = await fetch(url);
+    const data = await res.json();
     
-    dateRangeEl.textContent = `${formatDateDisplay(startDate)} - ${formatDateDisplay(endDate)}`;
+    gamesData = { today: [], tomorrow: [], dayafter: [] };
     
-    const url = `${STATS_API_BASE}/schedule?sportId=1&startDate=${startStr}&endDate=${endStr}&hydrate=probablePitcher,broadcasts`;
-    
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("Failed to fetch MLB API");
-    const data = await response.json();
-    
-    // Process and filter games
-    const allGames = [];
     if (data.dates) {
-        for (const dateObj of data.dates) {
-            for (const game of dateObj.games) {
-                allGames.push(game);
+        data.dates.forEach(dateObj => {
+            const games = dateObj.games.map(processGame);
+            
+            if (dateObj.date === d0Str) gamesData.today = games;
+            else if (dateObj.date === d1Str) gamesData.tomorrow = games;
+            else if (dateObj.date === d2Str) gamesData.dayafter = games;
+        });
+    }
+}
+
+function processGame(game) {
+    const away = game.teams.away.team.name;
+    const home = game.teams.home.team.name;
+    const awayUnseen = isTeamMatch(away);
+    const homeUnseen = isTeamMatch(home);
+    
+    let featuredNetworks = [];
+    let allNetworks = [];
+    if (game.broadcasts) {
+        game.broadcasts.forEach(b => {
+            // Filter duplicates out of the list for clean UI
+            if (!allNetworks.includes(b.name)) allNetworks.push(b.name);
+            const n = b.name.toLowerCase();
+            if (n.includes('apple') || n.includes('peacock') || n.includes('netflix') || n.includes('free')) {
+                featuredNetworks.push(b.name);
             }
-        }
+        });
     }
     
-    // Filter logic
-    const oneHourAgo = Date.now() - (60 * 60 * 1000);
+    return {
+        id: game.gamePk,
+        date: new Date(game.gameDate),
+        location: game.venue.name,
+        away: { name: away, unseen: awayUnseen, sp: game.teams.away.probablePitcher?.fullName || 'TBD' },
+        home: { name: home, unseen: homeUnseen, sp: game.teams.home.probablePitcher?.fullName || 'TBD' },
+        bothUnseen: awayUnseen && homeUnseen,
+        anyUnseen: awayUnseen || homeUnseen,
+        allNetworks: allNetworks.length > 0 ? allNetworks.join(', ') : 'No TV Info',
+        featuredNetworks: featuredNetworks
+    };
+}
+
+// Rendering
+function renderSidebar() {
+    const divisions = {};
+    let unseenCount = 0;
     
-    upcomingGames = allGames.filter(game => {
-        // Exclude games that started over an hour ago from *real* time
-        const gameTime = new Date(game.gameDate).getTime();
-        if (gameTime < oneHourAgo) return false;
-        
-        // Include if Home or Away team is in our "My Teams" list
-        const awayTeam = game.teams.away.team.name;
-        const homeTeam = game.teams.home.team.name;
-        
-        // Partial match allows for things like "Orioles" matching "Baltimore Orioles"
-        const isMyTeam = (teamName) => {
-            return myTeams.some(myTeam => 
-                teamName.toLowerCase().includes(myTeam.toLowerCase()) || 
-                myTeam.toLowerCase().includes(teamName.toLowerCase())
-            );
-        };
-        
-        return isMyTeam(awayTeam) || isMyTeam(homeTeam);
+    allTeamsDetailed.forEach(team => {
+        if (!divisions[team.division]) divisions[team.division] = [];
+        divisions[team.division].push(team);
+        if (team.unseen) unseenCount++;
     });
     
-    // Sort by chronological order
-    upcomingGames.sort((a, b) => new Date(a.gameDate).getTime() - new Date(b.gameDate).getTime());
-}
+    // Header
+    dom.sidebarRemaining.textContent = `${unseenCount} of 30 remaining`;
+    dom.sidebarCount.textContent = unseenCount;
+    
+    // Metric Shelf Goal
+    const seenCount = 30 - unseenCount;
+    dom.metricSeen.textContent = seenCount;
+    dom.metricRemaining.textContent = `${unseenCount} teams remaining`;
+    dom.metricPercent.textContent = `${Math.round((seenCount/30)*100)}%`;
+    if (seenCount === 30) dom.metricPercent.style.borderColor = "var(--accent-green)";
 
-// 4. Render Games
-function renderGames() {
-    if (upcomingGames.length === 0) {
-        gamesContainer.innerHTML = `
-            <div class="no-games">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">📭</div>
-                <h3>No Upcoming Games Found</h3>
-                <p style="margin-top: 0.5rem">Check back later or add more teams to your Google Sheet.</p>
+    // Divisions HTML
+    let html = '';
+    const sortedDivs = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"];
+    sortedDivs.forEach(div => {
+        const divTeams = divisions[div].sort((a,b) => a.name.localeCompare(b.name));
+        const unseenInDiv = divTeams.filter(t => t.unseen).length;
+        
+        html += `
+            <div class="division-group">
+                <div class="division-header">
+                    <span>${div}</span>
+                    <span class="division-counts">${unseenInDiv}/5 Unseen</span>
+                </div>
+                ${divTeams.map(t => `
+                    <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
+                        ${t.unseen ? '' : '<div class="custom-checkbox">✓</div>'}
+                        ${t.name}
+                    </div>
+                `).join('')}
             </div>
         `;
+    });
+    dom.divisionsContainer.innerHTML = html;
+}
+
+function renderMetrics() {
+    // Collect all games in 3-day
+    const all = [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter];
+    
+    const anyUnseenCount = all.filter(g => g.anyUnseen).length;
+    const bothUnseenCount = all.filter(g => g.bothUnseen).length;
+    
+    dom.metric3Day.textContent = anyUnseenCount;
+    dom.metricBoth.textContent = bothUnseenCount;
+    
+    dom.metricToday.textContent = gamesData.today.length;
+    dom.metricFuture.textContent = `${gamesData.tomorrow.length} tomorrow • ${gamesData.dayafter.length} day after`;
+}
+
+function renderTabs() {
+    // Just populate dates dynamically onto the tabs
+    const d0 = new Date();
+    const d1 = new Date(d0); d1.setDate(d0.getDate() + 1);
+    const d2 = new Date(d0); d2.setDate(d0.getDate() + 2);
+    
+    document.getElementById('tab-date-0').textContent = formatDateForTab(d0, "Today");
+    document.getElementById('tab-date-1').textContent = formatDateForTab(d1, "Tomorrow");
+    document.getElementById('tab-date-2').textContent = formatDateForTab(d2, "Day After");
+    
+    document.getElementById('badge-today').textContent = gamesData.today.length;
+    document.getElementById('badge-tomorrow').textContent = gamesData.tomorrow.length;
+    document.getElementById('badge-dayafter').textContent = gamesData.dayafter.length;
+}
+
+function renderGames() {
+    const list = gamesData[activeTab] || [];
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    
+    // Apply filters
+    const filtered = list.filter(g => {
+        if (g.date < oneHourAgo) return false;
+        if (filters.bothUnseen && !g.bothUnseen) return false;
+        if (filters.featured && g.featuredNetworks.length === 0) return false;
+        return true;
+    });
+    
+    if (filtered.length === 0) {
+        dom.gamesContainer.innerHTML = `<div class="error-msg">No games match this filter.</div>`;
         return;
     }
     
-    gamesContainer.innerHTML = upcomingGames.map(game => {
-        const gameDate = new Date(game.gameDate);
-        const awayTeam = game.teams.away;
-        const homeTeam = game.teams.home;
-        
-        // Extract Pitchers
-        const awayPitcher = awayTeam.probablePitcher ? awayTeam.probablePitcher.fullName : 'TBD';
-        const homePitcher = homeTeam.probablePitcher ? homeTeam.probablePitcher.fullName : 'TBD';
-        
-        // Discover Broadcasts (Apple TV, Peacock, etc)
-        const broadcasts = [];
-        if (game.broadcasts) {
-            game.broadcasts.forEach(b => {
-                const name = b.name.toLowerCase();
-                if (name.includes('apple')) broadcasts.push({ name: 'Apple TV+', type: 'apple' });
-                else if (name.includes('peacock')) broadcasts.push({ name: 'Peacock', type: 'peacock' });
-                else if (name.includes('espn') || name.includes('fox') || name.includes('tbs') || name.includes('fs1')) {
-                    // Only add national broadcasts if not already added to avoid duplicates
-                    if (!broadcasts.some(br => br.name === b.name)) {
-                        broadcasts.push({ name: b.name, type: 'national' });
-                    }
-                }
-            });
-        }
-        
-        // Status Check
-        const status = game.status.detailedState;
-        const isLive = status === "In Progress" || status === "Warmup";
-        const statusClass = isLive ? "live" : "";
-        const statusDisplay = isLive ? "LIVE NOW" : status;
-        
-        // Highlight logic
-        const isMyTeam = (teamName) => myTeams.some(myTeam => teamName.toLowerCase().includes(myTeam.toLowerCase()) || myTeam.toLowerCase().includes(teamName.toLowerCase()));
-        const awayHighlight = isMyTeam(awayTeam.team.name) ? "highlight" : "";
-        const homeHighlight = isMyTeam(homeTeam.team.name) ? "highlight" : "";
+    dom.gamesContainer.innerHTML = filtered.map(g => {
+        const timeStr = g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET';
         
         return `
-            <div class="game-card">
-                <div class="game-header">
-                    <div class="game-date">${formatDateTime(gameDate)}</div>
-                    <div class="game-status ${statusClass}">${statusDisplay}</div>
-                </div>
-                
-                <div class="matchup">
-                    <div class="team-row">
-                        <span class="team-name ${awayHighlight}">${awayTeam.team.name}</span>
-                        <span class="team-score ${awayTeam.isWinner ? 'winner' : ''}">${awayTeam.score !== undefined ? awayTeam.score : ''}</span>
+            <div class="game-card-row">
+                <div class="team-split">
+                    <div class="matchup-team">
+                        <span class="team-name ${g.away.unseen ? 'unseen-text' : ''}">${g.away.name}</span>
+                        ${g.away.unseen ? `<span class="unseen-badge">UNSEEN</span>` : ''}
                     </div>
-                    <div class="team-row">
-                        <span class="team-name ${homeHighlight}">${homeTeam.team.name}</span>
-                        <span class="team-score ${homeTeam.isWinner ? 'winner' : ''}">${homeTeam.score !== undefined ? homeTeam.score : ''}</span>
+                    <div class="matchup-team">
+                        <span class="team-name ${g.home.unseen ? 'unseen-text' : ''}">${g.home.name}</span>
+                        ${g.home.unseen ? `<span class="unseen-badge">UNSEEN</span>` : ''}
                     </div>
                 </div>
                 
-                <div class="pitchers">
-                    <div class="pitcher-row">
-                        <span class="pitcher-label">Away Starter:</span>
-                        <span class="pitcher-name">${awayPitcher}</span>
-                    </div>
-                    <div class="pitcher-row">
-                        <span class="pitcher-label">Home Starter:</span>
-                        <span class="pitcher-name">${homePitcher}</span>
-                    </div>
+                <div class="pitcher-split">
+                    <div>SP ${g.away.sp}</div>
+                    <div>SP ${g.home.sp}</div>
                 </div>
                 
-                ${broadcasts.length > 0 ? `
-                    <div class="broadcast-badges">
-                        ${broadcasts.map(b => `<span class="broadcast-badge badge-${b.type}">${b.name}</span>`).join('')}
-                    </div>
-                ` : ''}
+                <div class="game-meta">
+                    <div class="game-time"><span class="score-box"></span> ${timeStr}</div>
+                    <div class="game-location\">📺 ${g.allNetworks}</div>
+                    ${g.bothUnseen ? `<div class="both-unseen-badge">★ BOTH UNSEEN</div>` : ''}
+                    ${g.featuredNetworks.map(n => `<div class="network-badge">${n}</div>`).join('')}
+                </div>
             </div>
         `;
     }).join('');
 }
 
-// Helpers
-function formatDateDisplay(date) {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+// Utils
+function isTeamMatch(name) {
+    return myUnseenTeams.some(u => name.toLowerCase().includes(u.toLowerCase()) || u.toLowerCase().includes(name.toLowerCase()));
+}
+function formatDateForTab(d, prefix) {
+    return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`;
 }
 
-function formatDateTime(date) {
-    const today = new Date();
-    let prefix = "";
-    
-    // Check if it's today or tomorrow relative to MOCK_DATE testing context
-    // For simplicity, we just use standard local formatting
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + 
-           " • " + 
-           date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-
-// Start application
 document.addEventListener('DOMContentLoaded', init);

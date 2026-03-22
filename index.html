@@ -3,57 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Baseball Games to Watch</title>
-    <meta name="description" content="Track your favorite MLB teams and upcoming games with a gorgeous client-side dashboard.">
+    <title>BaseballTracker</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="app-background"></div>
-    <div class="app-container">
-        <header class="header neon-border">
-            <div class="header-content">
+    <div class="app-layout">
+        <!-- GLOBAL HEADER -->
+        <header class="app-header">
+            <div class="header-left">
                 <div class="logo-area">
                     <span class="logo-icon">⚾</span>
-                    <h1>Baseball Games to Watch</h1>
+                    <h1>BaseballTracker</h1>
+                    <span class="badge-season">2026 Season</span>
                 </div>
-                <p class="subtitle">Your customized upcoming game schedule</p>
             </div>
-            <div class="header-status">
-                <span id="status-indicator" class="status-indicator status-loading"></span>
-                <span id="status-text">Fetching live data...</span>
+            <div class="header-right">
+                <div class="sync-status" id="sync-status">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Ready</span>
+                </div>
+                <button class="btn btn-outline" id="btn-sync">
+                    <span class="icon">🔗</span> Sync Sheet
+                </button>
+                <button class="btn btn-outline" id="btn-refresh">
+                    <span class="icon">🔄</span> Refresh
+                </button>
             </div>
         </header>
 
-        <main class="dashboard">
-            <section class="teams-section glass-panel">
-                <div class="section-header">
-                    <h2><span class="icon">⭐</span> My Teams</h2>
-                    <span class="badge" id="team-count">0</span>
-                </div>
-                <div id="teams-container" class="teams-container">
-                    <div class="loading-state">
-                        <div class="spinner"></div>
-                        <p>Syncing from Google Sheets...</p>
+        <!-- MAIN LAYOUT (Left Content + Right Sidebar) -->
+        <div class="main-container">
+            <div class="content-left">
+                
+                <!-- METRICS SHELF -->
+                <div class="metrics-shelf">
+                    <div class="metric-card">
+                        <div class="metric-icon-circle">
+                            <span id="metric-percent">0%</span>
+                        </div>
+                        <div class="metric-info">
+                            <span class="metric-label">SEASON GOAL</span>
+                            <div class="metric-value"><span id="metric-seen">0</span> / 30 teams</div>
+                            <span class="metric-sublabel" id="metric-remaining">0 teams remaining</span>
+                        </div>
+                    </div>
+                    <div class="metric-card highlight-blue">
+                        <div class="metric-info">
+                            <span class="metric-label"><span class="icon">🌎</span> In 3-Day Window</span>
+                            <div class="metric-value" id="metric-3day">0</div>
+                            <span class="metric-sublabel">games with unseen teams</span>
+                        </div>
+                    </div>
+                    <div class="metric-card highlight-green">
+                        <div class="metric-info">
+                            <span class="metric-label"><span class="icon">⭐</span> Both Teams Unseen</span>
+                            <div class="metric-value" id="metric-both">0</div>
+                            <span class="metric-sublabel">top priority matchups</span>
+                        </div>
+                    </div>
+                    <div class="metric-card highlight-gold">
+                        <div class="metric-info">
+                            <span class="metric-label"><span class="icon">📈</span> Today</span>
+                            <div class="metric-value" id="metric-today">0</div>
+                            <span class="metric-sublabel" id="metric-future">0 tomorrow • 0 day after</span>
+                        </div>
                     </div>
                 </div>
-            </section>
 
-            <section class="games-section glass-panel">
-                <div class="section-header">
-                    <h2><span class="icon">📅</span> Upcoming Games (Next 3 Days)</h2>
-                    <div class="date-range" id="date-range">...</div>
+                <!-- TABS -->
+                <div class="tabs-row">
+                    <button class="tab-btn active" data-tab="today">
+                        <span class="tab-date" id="tab-date-0">Day, Mon 00</span>
+                        <span class="tab-title">Today</span>
+                        <span class="tab-badge" id="badge-today">0</span>
+                    </button>
+                    <button class="tab-btn" data-tab="tomorrow">
+                        <span class="tab-date" id="tab-date-1">Day, Mon 00</span>
+                        <span class="tab-title">Tomorrow</span>
+                        <span class="tab-badge" id="badge-tomorrow">0</span>
+                    </button>
+                    <button class="tab-btn" data-tab="dayafter">
+                        <span class="tab-date" id="tab-date-2">Day, Mon 00</span>
+                        <span class="tab-title">Day After</span>
+                        <span class="tab-badge" id="badge-dayafter">0</span>
+                    </button>
                 </div>
-                <div id="games-container" class="games-container">
-                    <div class="loading-state">
-                        <div class="spinner"></div>
-                        <p>Loading MLB Schedule...</p>
+
+                <!-- FILTERS -->
+                <div class="filters-row">
+                    <span class="filter-label"><span class="icon">⚡</span> Filter:</span>
+                    <button class="filter-btn" id="filter-unseen">
+                        <span class="icon">⭐</span> Both Teams Unseen
+                    </button>
+                    <button class="filter-btn" id="filter-broadcasts">
+                        <span class="icon">📺</span> Featured Broadcasts
+                    </button>
+                </div>
+
+                <!-- GAMES LIST -->
+                <div class="games-header">
+                    <h3>★ TOP PRIORITY — BOTH TEAMS UNSEEN</h3>
+                </div>
+                <div class="games-list" id="games-container">
+                    <div class="loading-state">Loading matchups...</div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT SIDEBAR: TEAMS CHECKLIST -->
+            <aside class="sidebar-right">
+                <div class="sidebar-header">
+                    <div class="sidebar-title">
+                        <h3>Standings</h3>
+                        <span class="sidebar-subtitle" id="sidebar-remaining">0 of 30 remaining</span>
                     </div>
+                    <div class="sidebar-circle-badge" id="sidebar-count">0</div>
                 </div>
-            </section>
-        </main>
+                <div class="divisions-container" id="divisions-container">
+                    <div class="loading-state">Loading standings...</div>
+                </div>
+            </aside>
+        </div>
     </div>
-
     <script src="app.js"></script>
 </body>
 </html>
