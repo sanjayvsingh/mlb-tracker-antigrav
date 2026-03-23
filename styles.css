@@ -76,7 +76,8 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .team-name { font-weight: 600; font-size: 1rem; }
 .team-name.unseen-text { color: #fff; }
 
-.unseen-badge { font-size: 0.65rem; border: 1px solid var(--accent-green); color: var(--accent-green); padding: 2px 6px; border-radius: 4px; font-weight: 700; background: var(--accent-green-bg); letter-spacing: 0.5px; }
+.unseen-icon { color: #ef4444; font-size: 1.1rem; }
+.seen-icon { color: var(--accent-green); font-size: 1.1rem; font-weight: 800; }
 
 .pitcher-split { display: flex; flex-direction: column; gap: 1rem; color: var(--text-muted); font-size: 0.85rem; margin-left: 2rem;}
 

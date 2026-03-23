@@ -18,9 +18,6 @@ let filters = { bothUnseen: false, featured: false };
 
 // DOM Maps
 const dom = {
-    syncStatus: document.getElementById('sync-status'),
-    btnSync: document.getElementById('btn-sync'),
-    btnRefresh: document.getElementById('btn-refresh'),
     metricSeen: document.getElementById('metric-seen'),
     metricRemaining: document.getElementById('metric-remaining'),
     metricPercent: document.getElementById('metric-percent'),
@@ -39,37 +36,22 @@ async function init() {
     await loadEverything();
 }
 
-function updateStatus(state, text) {
-    dom.syncStatus.innerHTML = `<span class="status-dot ${state}"></span><span class="status-text">${text}</span>`;
-}
-
 async function loadEverything() {
     try {
-        updateStatus('loading', 'Syncing Sheet...');
         await fetchGoogleSheetTeams();
-        
-        updateStatus('loading', 'Loading Teams...');
         loadStaticTeams();
-        
-        updateStatus('loading', 'Loading Schedule...');
         await fetchSchedule();
         
         renderSidebar();
         renderMetrics();
         renderTabs();
         renderGames();
-        
-        updateStatus('ready', 'Live synced');
     } catch (e) {
         console.error(e);
-        updateStatus('error', 'Sync failed');
     }
 }
 
 function setupListeners() {
-    dom.btnRefresh.addEventListener('click', loadEverything);
-    dom.btnSync.addEventListener('click', loadEverything);
-    
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -189,7 +171,7 @@ function processGame(game) {
             if (!allNetworks.includes(b.name)) allNetworks.push(b.name);
             const n = b.name.toLowerCase();
             if (n.includes('apple') || n.includes('peacock') || n.includes('netflix') || n.includes('free')) {
-                featuredNetworks.push(b.name);
+                if (!featuredNetworks.includes(b.name)) featuredNetworks.push(b.name);
             }
         });
     }
@@ -307,12 +289,12 @@ function renderGames() {
             <div class="game-card-row">
                 <div class="team-split">
                     <div class="matchup-team">
+                        ${g.away.unseen ? `<span class="unseen-icon">👁</span>` : `<span class="seen-icon">✓</span>`}
                         <span class="team-name ${g.away.unseen ? 'unseen-text' : ''}">${g.away.name}</span>
-                        ${g.away.unseen ? `<span class="unseen-badge">UNSEEN</span>` : ''}
                     </div>
                     <div class="matchup-team">
+                        ${g.home.unseen ? `<span class="unseen-icon">👁</span>` : `<span class="seen-icon">✓</span>`}
                         <span class="team-name ${g.home.unseen ? 'unseen-text' : ''}">${g.home.name}</span>
-                        ${g.home.unseen ? `<span class="unseen-badge">UNSEEN</span>` : ''}
                     </div>
                 </div>
                 
