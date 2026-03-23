@@ -5,6 +5,19 @@
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1XTmkD-ms9UpE2KVNgp7eEOszJ5MX8oq_rUZ2tyuSlqI/export?format=csv";
 const STATS_API_BASE = "https://statsapi.mlb.com/api/v1";
 
+const MLB_OFFICIAL_NAMES = new Set([
+    "Orioles", "Red Sox", "Yankees", "Rays", "Blue Jays",
+    "White Sox", "Guardians", "Tigers", "Royals", "Twins",
+    "Astros", "Angels", "Athletics", "Mariners", "Rangers",
+    "Braves", "Marlins", "Mets", "Phillies", "Nationals",
+    "Cubs", "Reds", "Brewers", "Pirates", "Cardinals",
+    "Diamondbacks", "Rockies", "Dodgers", "Padres", "Giants"
+]);
+
+function isOfficialMLBTeam(fullName) {
+    return [...MLB_OFFICIAL_NAMES].some(n => fullName.includes(n));
+}
+
 function getLocalDateString(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -160,8 +173,10 @@ async function fetchSchedule() {
 function processGame(game) {
     const away = game.teams.away.team.name;
     const home = game.teams.home.team.name;
-    const awayUnseen = isTeamMatch(away);
-    const homeUnseen = isTeamMatch(home);
+    const awayOfficial = isOfficialMLBTeam(away);
+    const homeOfficial = isOfficialMLBTeam(home);
+    const awayUnseen = awayOfficial && isTeamMatch(away);
+    const homeUnseen = homeOfficial && isTeamMatch(home);
     
     let featuredNetworks = [];
     let allNetworks = [];
@@ -180,8 +195,8 @@ function processGame(game) {
         id: game.gamePk,
         date: new Date(game.gameDate),
         location: game.venue.name,
-        away: { name: away, unseen: awayUnseen, sp: game.teams.away.probablePitcher?.fullName || 'TBD' },
-        home: { name: home, unseen: homeUnseen, sp: game.teams.home.probablePitcher?.fullName || 'TBD' },
+        away: { name: away, unseen: awayUnseen, official: awayOfficial, sp: game.teams.away.probablePitcher?.fullName || 'TBD' },
+        home: { name: home, unseen: homeUnseen, official: homeOfficial, sp: game.teams.home.probablePitcher?.fullName || 'TBD' },
         bothUnseen: awayUnseen && homeUnseen,
         anyUnseen: awayUnseen || homeUnseen,
         allNetworks: allNetworks.length > 0 ? allNetworks.join(', ') : 'No TV Info',
@@ -289,11 +304,11 @@ function renderGames() {
             <div class="game-card-row">
                 <div class="team-split">
                     <div class="matchup-team">
-                        ${g.away.unseen ? `<span class="unseen-icon">👁</span>` : `<span class="seen-icon">✓</span>`}
+                        ${g.away.official ? (g.away.unseen ? `<span class="unseen-icon">👁</span>` : `<span class="seen-icon">✓</span>`) : ''}
                         <span class="team-name ${g.away.unseen ? 'unseen-text' : ''}">${g.away.name}</span>
                     </div>
                     <div class="matchup-team">
-                        ${g.home.unseen ? `<span class="unseen-icon">👁</span>` : `<span class="seen-icon">✓</span>`}
+                        ${g.home.official ? (g.home.unseen ? `<span class="unseen-icon">👁</span>` : `<span class="seen-icon">✓</span>`) : ''}
                         <span class="team-name ${g.home.unseen ? 'unseen-text' : ''}">${g.home.name}</span>
                     </div>
                 </div>
