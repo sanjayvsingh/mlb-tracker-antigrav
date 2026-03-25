@@ -321,7 +321,7 @@ function renderGames() {
                 <div class="game-meta">
                     <div class="game-time"><span class="score-box"></span> ${timeStr}</div>
                     <div class="game-location\""><span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px;">tv</span>${g.allNetworks}</div>
-                    ${g.bothUnseen ? `<div class="both-unseen-badge">★ BOTH UNSEEN</div>` : ''}
+                    ${g.bothUnseen ? `<div class="both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : ''}
                     ${g.featuredNetworks.map(n => `<div class="network-badge">${n}</div>`).join('')}
                 </div>
             </div>
