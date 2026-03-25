@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Baseball Games to Watch</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -39,21 +40,21 @@
                     </div>
                     <div class="metric-card highlight-blue">
                         <div class="metric-info">
-                            <span class="metric-label"><span class="icon">🌎</span> In 3-Day Window</span>
+                            <span class="metric-label"><span class="material-icons">public</span> In 3-Day Window</span>
                             <div class="metric-value" id="metric-3day">0</div>
                             <span class="metric-sublabel">games with unseen teams</span>
                         </div>
                     </div>
                     <div class="metric-card highlight-green">
                         <div class="metric-info">
-                            <span class="metric-label"><span class="unseen-icon">👁</span> Both Teams Unseen</span>
+                            <span class="metric-label"><span class="material-icons unseen-icon">visibility</span> Both Teams Unseen</span>
                             <div class="metric-value" id="metric-both">0</div>
                             <span class="metric-sublabel">top priority matchups</span>
                         </div>
                     </div>
                     <div class="metric-card highlight-gold">
                         <div class="metric-info">
-                            <span class="metric-label"><span class="icon">📈</span> Today</span>
+                            <span class="metric-label"><span class="material-icons">today</span> Today</span>
                             <div class="metric-value" id="metric-today">0</div>
                             <span class="metric-sublabel" id="metric-future">0 tomorrow • 0 day after</span>
                         </div>
@@ -81,12 +82,12 @@
 
                 <!-- FILTERS -->
                 <div class="filters-row">
-                    <span class="filter-label"><span class="icon">⚡</span> Filter:</span>
+                    <span class="filter-label"><span class="material-icons">filter_list</span> Filter:</span>
                     <button class="filter-btn" id="filter-unseen">
-                        <span class="icon">👁</span> Both Teams Unseen
+                        <span class="material-icons unseen-icon">visibility</span> Both Teams Unseen
                     </button>
                     <button class="filter-btn" id="filter-broadcasts">
-                        <span class="icon">📺</span> Featured Broadcasts
+                        <span class="material-icons">tv</span> Featured Broadcasts
                     </button>
                 </div>
 

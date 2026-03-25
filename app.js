@@ -241,7 +241,7 @@ function renderSidebar() {
                 </div>
                 ${divTeams.map(t => `
                     <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
-                        ${t.unseen ? '' : '<div class="custom-checkbox">✓</div>'}
+                        ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
                         ${t.name}
                     </div>
                 `).join('')}
@@ -304,11 +304,11 @@ function renderGames() {
             <div class="game-card-row">
                 <div class="team-split">
                     <div class="matchup-team">
-                        ${g.away.official ? (g.away.unseen ? `<span class="unseen-icon">👁</span>` : `<span class="seen-icon">✓</span>`) : ''}
+                        ${g.away.official ? (g.away.unseen ? `<span class="material-icons unseen-icon">visibility</span>` : `<span class="material-icons seen-icon">check</span>`) : ''}
                         <span class="team-name ${g.away.unseen ? 'unseen-text' : ''}">${g.away.name}</span>
                     </div>
                     <div class="matchup-team">
-                        ${g.home.official ? (g.home.unseen ? `<span class="unseen-icon">👁</span>` : `<span class="seen-icon">✓</span>`) : ''}
+                        ${g.home.official ? (g.home.unseen ? `<span class="material-icons unseen-icon">visibility</span>` : `<span class="material-icons seen-icon">check</span>`) : ''}
                         <span class="team-name ${g.home.unseen ? 'unseen-text' : ''}">${g.home.name}</span>
                     </div>
                 </div>
@@ -320,7 +320,7 @@ function renderGames() {
                 
                 <div class="game-meta">
                     <div class="game-time"><span class="score-box"></span> ${timeStr}</div>
-                    <div class="game-location\">📺 ${g.allNetworks}</div>
+                    <div class="game-location\""><span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px;">tv</span>${g.allNetworks}</div>
                     ${g.bothUnseen ? `<div class="both-unseen-badge">★ BOTH UNSEEN</div>` : ''}
                     ${g.featuredNetworks.map(n => `<div class="network-badge">${n}</div>`).join('')}
                 </div>
