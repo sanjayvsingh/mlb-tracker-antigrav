@@ -4,9 +4,11 @@ A real-time baseball game tracker designed to help you catch the games that matt
 
 ## 🚀 Project Overview
 
-This is my **first Antigravity project**! I'm using this as a practical use case to experiment with AI-driven development, explore modern web patterns, and build my coding skills.
+This is my **first Antigravity project**! The goal is to solve a very specific challenge: **watching every MLB team play at least once a year.**
 
-The application tracks MLB games and highlights matchups involving teams you haven't seen yet this season, helping you complete the "seen all 30 teams" challenge.
+Last year, I managed to do this using a clever Google Sheet, but it was always a struggle to find which games were available to watch — especially as the season progressed and the list of "unseen" teams got smaller. This app directly streamlines that process by highlighting exactly which games feature teams I still need to see.
+
+While built for personal use, it's also a great way for any fan to see what interesting matchups are coming up.
 
 ## ✨ Features
 
@@ -25,4 +27,4 @@ The application tracks MLB games and highlights matchups involving teams you hav
 
 ## 🎯 Goal
 
-The primary goal of this project is to develop and refine my skills while building a useful tool for baseball fans. It demonstrates the coordination between an AI agent and a user to build, refine, and deploy a functional web application.
+The primary goal of this project is to turn a manual tracking process into a seamless, automated experience. It's a practical use case for developing AI-assisted coding skills while building a tool that provides real, daily value to a baseball fan.
