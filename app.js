@@ -25,6 +25,7 @@ function getLocalDateString(d) {
 // State
 let myUnseenTeams = []; 
 let allTeamsDetailed = []; // From standings
+let standingsData = null; // Store raw standings for record and rank
 let gamesData = { today: [], tomorrow: [], dayafter: [] };
 let activeTab = 'today';
 let filters = { bothUnseen: false, featured: false };
@@ -53,14 +54,15 @@ async function loadEverything() {
     try {
         await fetchGoogleSheetTeams();
         loadStaticTeams();
+        await fetchStandings(); // Get current year standings
         await fetchSchedule();
-        
+    } catch (e) {
+        console.error("Load error:", e);
+    } finally {
         renderSidebar();
         renderMetrics();
         renderTabs();
         renderGames();
-    } catch (e) {
-        console.error(e);
     }
 }
 
@@ -137,9 +139,50 @@ function loadStaticTeams() {
             allTeamsDetailed.push({
                 name: tName,
                 division: div,
-                unseen: isTeamMatch(tName)
+                unseen: isTeamMatch(tName),
+                wins: 0,
+                losses: 0,
+                rank: 99
             });
         });
+    }
+}
+
+// 2.5 Standings -> Rank and Record
+async function fetchStandings() {
+    try {
+        const year = new Date().getFullYear();
+        const url = `${STATS_API_BASE}/standings?leagueId=103,104&season=${year}&standingsTypes=regularSeason`;
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data && data.records && data.records.length > 0) {
+            standingsData = data.records;
+            
+            let anyTeamHasRecord = false;
+            
+            // Map stats back to allTeamsDetailed
+            data.records.forEach(divRecord => {
+                divRecord.teamRecords.forEach(tr => {
+                    const team = allTeamsDetailed.find(t => t.name.includes(tr.team.name) || tr.team.name.includes(t.name));
+                    if (team) {
+                        team.wins = tr.wins;
+                        team.losses = tr.losses;
+                        team.rank = parseInt(tr.divisionRank);
+                        if (tr.wins > 0 || tr.losses > 0) anyTeamHasRecord = true;
+                    }
+                });
+            });
+
+            // If ANY team has a record, then everyone should show a record (even if 0-0)
+            if (anyTeamHasRecord || data.records.some(r => r.teamRecords.length > 0)) {
+                allTeamsDetailed.forEach(t => {
+                    t.hasRecord = true;
+                });
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch standings:", e);
     }
 }
 
@@ -230,7 +273,12 @@ function renderSidebar() {
     let html = '';
     const sortedDivs = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"];
     sortedDivs.forEach(div => {
-        const divTeams = divisions[div].sort((a,b) => a.name.localeCompare(b.name));
+        // Sort by rank if we have it and it's not the default 99, else alphabetical
+        const divTeams = divisions[div].sort((a,b) => {
+            if (a.rank !== 99 && b.rank !== 99) return a.rank - b.rank;
+            return a.name.localeCompare(b.name);
+        });
+        
         const unseenInDiv = divTeams.filter(t => t.unseen).length;
         
         html += `
@@ -239,12 +287,15 @@ function renderSidebar() {
                     <span>${div}</span>
                     <span class="division-counts">${unseenInDiv}/5 Unseen</span>
                 </div>
-                ${divTeams.map(t => `
-                    <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
-                        ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
-                        ${t.name}
-                    </div>
-                `).join('')}
+                ${divTeams.map(t => {
+                    const record = t.hasRecord ? ` <span class="team-record">(${t.wins}-${t.losses})</span>` : '';
+                    return `
+                        <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
+                            ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
+                            ${t.name}${record}
+                        </div>
+                    `;
+                }).join('')}
             </div>
         `;
     });

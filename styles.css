@@ -103,6 +103,7 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .team-checklist-item.is-unseen { color: #fff; }
 .custom-checkbox { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--text-muted); background: transparent; display: flex; justify-content: center; align-items: center; cursor: pointer; }
 .team-checklist-item.is-seen .custom-checkbox { background: var(--accent-green-bg); border-color: var(--accent-green); color: var(--accent-green); font-size: 10px; font-weight: 800; }
+.team-record { color: var(--text-muted); font-weight: 400; margin-left: 4px; }
 
 /* ERROR & LOADING */
 .loading-state, .error-msg { text-align: center; padding: 2rem; color: var(--text-muted); }
