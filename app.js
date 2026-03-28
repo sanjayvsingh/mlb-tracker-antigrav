@@ -15,7 +15,7 @@ const MLB_OFFICIAL_NAMES = new Set([
 ]);
 
 const ELECTRIC_STARTERS = [
-    "Skenes", "Skubal", "Yamamoto", "Crochet", "Ohtani", "Misiorowski", "deGrom"
+    "Skenes", "Skubal", "Yamamoto", "Crochet", "Ohtani", "Misiorowski", "deGrom", "Tong", "Yesavage", "Schlittler"
 ];
 
 const TEAM_FUN_SCORES = {
