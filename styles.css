@@ -80,6 +80,8 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .seen-icon { color: var(--accent-green); font-size: 1.1rem; font-weight: 800; }
 
 .pitcher-split { display: flex; flex-direction: column; gap: 1rem; color: var(--text-muted); font-size: 0.85rem; margin-left: 2rem;}
+.electric-sp { color: var(--accent-gold); font-weight: 700; display: flex; align-items: center; gap: 4px; }
+.electric-star { font-size: 14px !important; }
 
 .game-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-align: right; }
 .game-time { font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }

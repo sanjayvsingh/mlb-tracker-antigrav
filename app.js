@@ -14,6 +14,10 @@ const MLB_OFFICIAL_NAMES = new Set([
     "Diamondbacks", "Rockies", "Dodgers", "Padres", "Giants"
 ]);
 
+const ELECTRIC_STARTERS = [
+    "Skenes", "Skubal", "Yamamoto", "Crochet", "Ohtani", "Misiorowski", "deGrom"
+];
+
 function isOfficialMLBTeam(fullName) {
     return [...MLB_OFFICIAL_NAMES].some(n => fullName.includes(n));
 }
@@ -28,7 +32,7 @@ let allTeamsDetailed = []; // From standings
 let standingsData = null; // Store raw standings for record and rank
 let gamesData = { today: [], tomorrow: [], dayafter: [] };
 let activeTab = 'today';
-let filters = { bothUnseen: false, featured: false };
+let filters = { bothUnseen: false, featured: false, electric: false };
 
 // DOM Maps
 const dom = {
@@ -85,6 +89,12 @@ function setupListeners() {
 
     document.getElementById('filter-broadcasts').addEventListener('click', (e) => {
         filters.featured = !filters.featured;
+        e.currentTarget.classList.toggle('active');
+        renderGames();
+    });
+
+    document.getElementById('filter-electric').addEventListener('click', (e) => {
+        filters.electric = !filters.electric;
         e.currentTarget.classList.toggle('active');
         renderGames();
     });
@@ -221,6 +231,12 @@ function processGame(game) {
     const awayUnseen = awayOfficial && isTeamMatch(away);
     const homeUnseen = homeOfficial && isTeamMatch(home);
     
+    const awaySP = game.teams.away.probablePitcher?.fullName || 'TBD';
+    const homeSP = game.teams.home.probablePitcher?.fullName || 'TBD';
+
+    const isElectricAway = ELECTRIC_STARTERS.some(name => awaySP.includes(name));
+    const isElectricHome = ELECTRIC_STARTERS.some(name => homeSP.includes(name));
+
     let featuredNetworks = [];
     let allNetworks = [];
     if (game.broadcasts) {
@@ -238,10 +254,11 @@ function processGame(game) {
         id: game.gamePk,
         date: new Date(game.gameDate),
         location: game.venue.name,
-        away: { name: away, unseen: awayUnseen, official: awayOfficial, sp: game.teams.away.probablePitcher?.fullName || 'TBD' },
-        home: { name: home, unseen: homeUnseen, official: homeOfficial, sp: game.teams.home.probablePitcher?.fullName || 'TBD' },
+        away: { name: away, unseen: awayUnseen, official: awayOfficial, sp: awaySP, electric: isElectricAway },
+        home: { name: home, unseen: homeUnseen, official: homeOfficial, sp: homeSP, electric: isElectricHome },
         bothUnseen: awayUnseen && homeUnseen,
         anyUnseen: awayUnseen || homeUnseen,
+        anyElectric: isElectricAway || isElectricHome,
         allNetworks: allNetworks.length > 0 ? allNetworks.join(', ') : 'No TV Info',
         featuredNetworks: featuredNetworks
     };
@@ -251,6 +268,23 @@ function processGame(game) {
 function renderSidebar() {
     const divisions = {};
     let unseenCount = 0;
+    
+    // Check for teams with electric starters in the 3-day window
+    const electricInfo = new Map(); // nickname -> dateStr
+    [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter].forEach(g => {
+        const dateStr = formatDateForTab(g.date);
+        
+        // Find the nickname for away and home teams
+        const awayNickname = allTeamsDetailed.find(t => g.away.name.includes(t.name) || t.name.includes(g.away.name))?.name;
+        const homeNickname = allTeamsDetailed.find(t => g.home.name.includes(t.name) || t.name.includes(g.home.name))?.name;
+
+        if (g.away.electric && awayNickname && !electricInfo.has(awayNickname)) {
+            electricInfo.set(awayNickname, dateStr);
+        }
+        if (g.home.electric && homeNickname && !electricInfo.has(homeNickname)) {
+            electricInfo.set(homeNickname, dateStr);
+        }
+    });
     
     allTeamsDetailed.forEach(team => {
         if (!divisions[team.division]) divisions[team.division] = [];
@@ -289,10 +323,12 @@ function renderSidebar() {
                 </div>
                 ${divTeams.map(t => {
                     const record = t.hasRecord ? ` <span class="team-record">(${t.wins}-${t.losses})</span>` : '';
+                    const dateStr = electricInfo.get(t.name);
+                    const electricIcon = dateStr ? ` <span class="material-icons" style="color: var(--accent-gold); font-size: 14px; vertical-align: middle;" title="Starting ${dateStr}">bolt</span>` : '';
                     return `
                         <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
-                            ${t.name}${record}
+                            ${t.name}${record}${electricIcon}
                         </div>
                     `;
                 }).join('')}
@@ -340,6 +376,7 @@ function renderGames() {
         if (g.date < oneHourAgo) return false;
         if (filters.bothUnseen && !g.bothUnseen) return false;
         if (filters.featured && g.featuredNetworks.length === 0) return false;
+        if (filters.electric && !g.anyElectric) return false;
         return true;
     });
     
@@ -365,8 +402,12 @@ function renderGames() {
                 </div>
                 
                 <div class="pitcher-split">
-                    <div>SP ${g.away.sp}</div>
-                    <div>SP ${g.home.sp}</div>
+                    <div class="${g.away.electric ? 'electric-sp' : ''}">
+                        ${g.away.sp} ${g.away.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
+                    </div>
+                    <div class="${g.home.electric ? 'electric-sp' : ''}">
+                        ${g.home.sp} ${g.home.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
+                    </div>
                 </div>
                 
                 <div class="game-meta">
@@ -385,7 +426,7 @@ function isTeamMatch(name) {
     return myUnseenTeams.some(u => name.toLowerCase().includes(u.toLowerCase()) || u.toLowerCase().includes(name.toLowerCase()));
 }
 function formatDateForTab(d, prefix) {
-    return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`;
+    return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '')}`;
 }
 
 document.addEventListener('DOMContentLoaded', init);
