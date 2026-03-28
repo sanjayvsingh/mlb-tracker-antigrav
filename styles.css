@@ -8,6 +8,8 @@
     --text-muted: #8b9bb4;
     --accent-green: #22c55e;
     --accent-green-bg: rgba(34, 197, 94, 0.15);
+    --accent-red: #fca5a5;
+    --accent-blue: #38bdf8;
     --accent-blue: #3b82f6;
     --accent-gold: #eab308;
     --card-radius: 8px;
@@ -65,6 +67,13 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .filter-btn:hover { background: rgba(255,255,255,0.05); }
 .filter-btn.active { background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.4); }
 
+.fun-badge {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    font-weight: 700;
+}
+
 /* GAMES LIST */
 .games-header h3 { font-size: 0.85rem; color: var(--accent-green); letter-spacing: 1px; margin-bottom: 1rem; }
 .games-list { display: flex; flex-direction: column; gap: 8px; }
@@ -115,6 +124,11 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .app-footer { margin-top: 2rem; padding: 2rem 0; text-align: center; }
 .footer-content { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; letter-spacing: 0.5px; opacity: 0.7; }
 .bolt-small { color: var(--accent-gold); margin-right: 4px; }
+.diamond-icon { margin-left: 0; margin-right: 4px; font-size: 0.9rem; }
+.footer-separator { margin: 0 12px; opacity: 0.5; }
+.footer-link { color: var(--text-muted); text-decoration: none; border-bottom: 1px solid transparent; transition: all 0.2s; }
+.footer-link:hover { color: var(--accent-gold); border-bottom-color: var(--accent-gold); }
 
 .sidebar-bolt { color: var(--accent-gold); font-size: 14px !important; vertical-align: middle; margin-left: 2px; }
 .team-record { margin-left: 6px; }
+.sidebar-fun { font-size: 11px; margin-left: 4px; opacity: 0.8; cursor: help; }

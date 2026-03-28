@@ -18,6 +18,15 @@ const ELECTRIC_STARTERS = [
     "Skenes", "Skubal", "Yamamoto", "Crochet", "Ohtani", "Misiorowski", "deGrom"
 ];
 
+const TEAM_FUN_SCORES = {
+    "Dodgers": 5, "Athletics": 5, "Royals": 5, "Diamondbacks": 5, "Blue Jays": 5,
+    "Red Sox": 4, "Braves": 4, "Mets": 4, "Reds": 4, "Phillies": 4,
+    "Mariners": 4, "Cubs": 4, "Brewers": 4, "Orioles": 4,
+    "Pirates": 3, "Tigers": 3, "Rangers": 3, "Padres": 3, "Rays": 3,
+    "Yankees": 4, "Giants": 3, "Guardians": 2, "Twins": 2, "Astros": 2, "Cardinals": 2,
+    "Angels": 1, "Rockies": 1, "White Sox": 1, "Marlins": 1, "Nationals": 1
+};
+
 function isOfficialMLBTeam(fullName) {
     return [...MLB_OFFICIAL_NAMES].some(n => fullName.includes(n));
 }
@@ -32,7 +41,7 @@ let allTeamsDetailed = []; // From standings
 let standingsData = null; // Store raw standings for record and rank
 let gamesData = { today: [], tomorrow: [], dayafter: [] };
 let activeTab = 'today';
-let filters = { bothUnseen: false, featured: false, electric: false };
+let filters = { bothUnseen: false, featured: false, electric: false, funGames: false };
 
 // DOM Maps
 const dom = {
@@ -71,6 +80,12 @@ async function loadEverything() {
 }
 
 function setupListeners() {
+    document.getElementById('filter-fun').addEventListener('click', (e) => {
+        filters.funGames = !filters.funGames;
+        e.currentTarget.classList.toggle('active');
+        renderGames();
+    });
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -250,10 +265,21 @@ function processGame(game) {
         });
     }
     
+    // Calculate Fun Score
+    const awayNickname = allTeamsDetailed.find(t => away.includes(t.name) || t.name.includes(away))?.name || away;
+    const homeNickname = allTeamsDetailed.find(t => home.includes(t.name) || t.name.includes(home))?.name || home;
+    const awayFun = TEAM_FUN_SCORES[awayNickname] || 0;
+    const homeFun = TEAM_FUN_SCORES[homeNickname] || 0;
+    let gameFunScore = awayFun + homeFun;
+    if (isElectricAway) gameFunScore += 1;
+    if (isElectricHome) gameFunScore += 1;
+
     return {
         id: game.gamePk,
         date: new Date(game.gameDate),
         location: game.venue.name,
+        funScore: gameFunScore,
+        isHighFun: gameFunScore >= 7,
         away: { name: away, unseen: awayUnseen, official: awayOfficial, sp: awaySP, electric: isElectricAway },
         home: { name: home, unseen: homeUnseen, official: homeOfficial, sp: homeSP, electric: isElectricHome },
         bothUnseen: awayUnseen && homeUnseen,
@@ -325,10 +351,12 @@ function renderSidebar() {
                     const record = t.hasRecord ? `<span class="team-record">(${t.wins}-${t.losses})</span>` : '';
                     const dateStr = electricInfo.get(t.name);
                     const electricIcon = dateStr ? `<span class="material-icons sidebar-bolt" title="Starting ${dateStr}">bolt</span>` : '';
+                    const funScore = TEAM_FUN_SCORES[t.name] || 0;
+                    const funIcon = funScore > 0 ? `<span class="sidebar-fun" title="Joe Posnanski Fun Score: ${funScore}"><span class="material-icons" style="color: var(--accent-blue); font-size: 12px; vertical-align: middle;">diamond</span>${funScore}</span>` : '';
                     return `
                         <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
-                            ${t.name}${electricIcon}${record}
+                            ${t.name}${electricIcon}${funIcon}${record}
                         </div>
                     `;
                 }).join('')}
@@ -377,6 +405,7 @@ function renderGames() {
         if (filters.bothUnseen && !g.bothUnseen) return false;
         if (filters.featured && g.featuredNetworks.length === 0) return false;
         if (filters.electric && !g.anyElectric) return false;
+        if (filters.funGames && !g.isHighFun) return false;
         return true;
     });
     
@@ -387,9 +416,20 @@ function renderGames() {
     
     dom.gamesContainer.innerHTML = filtered.map(g => {
         const timeStr = g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET';
+        const badgesHtml = [
+            g.isHighFun ? `<div class="badge fun-badge" title="Fun Score: ${g.funScore} (Teams: ${TEAM_FUN_SCORES[g.away.nickname]}+${TEAM_FUN_SCORES[g.home.nickname]}, Electric Bonus: +${g.funScore - (TEAM_FUN_SCORES[g.away.nickname] + TEAM_FUN_SCORES[g.home.nickname])})"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${g.funScore}</div>` : '',
+            g.bothUnseen ? `<div class="badge both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : '',
+            ...g.featuredNetworks.map(n => `<div class="badge network-badge">${n}</div>`)
+        ].join('');
         
         return `
             <div class="game-card-row">
+                <div class="game-top">
+                    <div class="game-location">${g.location || ''}</div>
+                    <div class="game-badges">
+                        ${badgesHtml}
+                    </div>
+                </div>
                 <div class="team-split">
                     <div class="matchup-team">
                         ${g.away.official ? (g.away.unseen ? `<span class="material-icons unseen-icon">visibility</span>` : `<span class="material-icons seen-icon">check</span>`) : ''}
