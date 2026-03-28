@@ -322,9 +322,9 @@ function renderSidebar() {
                     <span class="division-counts">${unseenInDiv}/5 Unseen</span>
                 </div>
                 ${divTeams.map(t => {
-                    const record = t.hasRecord ? ` <span class="team-record">(${t.wins}-${t.losses})</span>` : '';
+                    const record = t.hasRecord ? `<span class="team-record">(${t.wins}-${t.losses})</span>` : '';
                     const dateStr = electricInfo.get(t.name);
-                    const electricIcon = dateStr ? ` <span class="material-icons" style="color: var(--accent-gold); font-size: 14px; vertical-align: middle;" title="Starting ${dateStr}">bolt</span>` : '';
+                    const electricIcon = dateStr ? `<span class="material-icons sidebar-bolt" title="Starting ${dateStr}">bolt</span>` : '';
                     return `
                         <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}

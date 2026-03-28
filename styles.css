@@ -115,3 +115,6 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .app-footer { margin-top: 2rem; padding: 2rem 0; text-align: center; }
 .footer-content { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; letter-spacing: 0.5px; opacity: 0.7; }
 .bolt-small { color: var(--accent-gold); margin-right: 4px; }
+
+.sidebar-bolt { color: var(--accent-gold); font-size: 14px !important; vertical-align: middle; margin-left: 2px; }
+.team-record { margin-left: 6px; }
