@@ -67,11 +67,28 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .filter-btn:hover { background: rgba(255,255,255,0.05); }
 .filter-btn.active { background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.4); }
 
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    width: fit-content;
+    white-space: nowrap;
+}
+
 .fun-badge {
     background: rgba(56, 189, 248, 0.15);
     color: #38bdf8;
     border: 1px solid rgba(56, 189, 248, 0.3);
-    font-weight: 700;
+}
+
+.game-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
 }
 
 /* GAMES LIST */
@@ -97,8 +114,16 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .score-box { font-family: monospace; font-size: 1.1rem; }
 .game-location { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
 
-.both-unseen-badge { background: var(--accent-green-bg); color: var(--accent-green); border: 1px solid var(--accent-green); font-size: 0.7rem; padding: 4px 10px; border-radius: 4px; font-weight: 800; margin-top: 4px; }
-.network-badge { font-size: 0.7rem; background: rgba(255,255,255,0.1); color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: 600; margin-top: 4px; }
+.both-unseen-badge { 
+    background: var(--accent-green-bg); 
+    color: var(--accent-green); 
+    border: 1px solid var(--accent-green); 
+}
+.network-badge { 
+    background: rgba(255,255,255,0.1); 
+    color: #fff; 
+    border: 1px solid rgba(255,255,255,0.2);
+}
 
 /* RIGHT SIDEBAR */
 .sidebar-right { background: var(--bg-panel); border: 1px solid var(--border-main); border-radius: var(--card-radius); padding: 1.5rem; }

@@ -279,7 +279,7 @@ function processGame(game) {
         date: new Date(game.gameDate),
         location: game.venue.name,
         funScore: gameFunScore,
-        isHighFun: gameFunScore >= 7,
+        isHighFun: gameFunScore >= 8,
         away: { name: away, unseen: awayUnseen, official: awayOfficial, sp: awaySP, electric: isElectricAway },
         home: { name: home, unseen: homeUnseen, official: homeOfficial, sp: homeSP, electric: isElectricHome },
         bothUnseen: awayUnseen && homeUnseen,
@@ -351,12 +351,10 @@ function renderSidebar() {
                     const record = t.hasRecord ? `<span class="team-record">(${t.wins}-${t.losses})</span>` : '';
                     const dateStr = electricInfo.get(t.name);
                     const electricIcon = dateStr ? `<span class="material-icons sidebar-bolt" title="Starting ${dateStr}">bolt</span>` : '';
-                    const funScore = TEAM_FUN_SCORES[t.name] || 0;
-                    const funIcon = funScore > 0 ? `<span class="sidebar-fun" title="Joe Posnanski Fun Score: ${funScore}"><span class="material-icons" style="color: var(--accent-blue); font-size: 12px; vertical-align: middle;">diamond</span>${funScore}</span>` : '';
                     return `
                         <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
-                            ${t.name}${electricIcon}${funIcon}${record}
+                            ${t.name}${electricIcon}${record}
                         </div>
                     `;
                 }).join('')}
