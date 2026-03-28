@@ -415,19 +415,13 @@ function renderGames() {
     dom.gamesContainer.innerHTML = filtered.map(g => {
         const timeStr = g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET';
         const badgesHtml = [
-            g.isHighFun ? `<div class="badge fun-badge" title="Fun Score: ${g.funScore} (Teams: ${TEAM_FUN_SCORES[g.away.nickname]}+${TEAM_FUN_SCORES[g.home.nickname]}, Electric Bonus: +${g.funScore - (TEAM_FUN_SCORES[g.away.nickname] + TEAM_FUN_SCORES[g.home.nickname])})"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${g.funScore}</div>` : '',
+            `<div class="badge fun-badge" title="Fun Score: ${g.funScore} (Teams: ${TEAM_FUN_SCORES[g.away.nickname]}+${TEAM_FUN_SCORES[g.home.nickname]}, Electric Bonus: +${g.funScore - (TEAM_FUN_SCORES[g.away.nickname] + TEAM_FUN_SCORES[g.home.nickname])})"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${g.funScore}</div>`,
             g.bothUnseen ? `<div class="badge both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : '',
             ...g.featuredNetworks.map(n => `<div class="badge network-badge">${n}</div>`)
         ].join('');
         
         return `
             <div class="game-card-row">
-                <div class="game-top">
-                    <div class="game-location">${g.location || ''}</div>
-                    <div class="game-badges">
-                        ${badgesHtml}
-                    </div>
-                </div>
                 <div class="team-split">
                     <div class="matchup-team">
                         ${g.away.official ? (g.away.unseen ? `<span class="material-icons unseen-icon">visibility</span>` : `<span class="material-icons seen-icon">check</span>`) : ''}
@@ -449,10 +443,12 @@ function renderGames() {
                 </div>
                 
                 <div class="game-meta">
-                    <div class="game-time"><span class="score-box"></span> ${timeStr}</div>
-                    <div class="game-location\""><span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px;">tv</span>${g.allNetworks}</div>
-                    ${g.bothUnseen ? `<div class="both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : ''}
-                    ${g.featuredNetworks.map(n => `<div class="network-badge">${n}</div>`).join('')}
+                    <div class="game-location">${g.location || ''}</div>
+                    <div class="game-time">${timeStr}</div>
+                    <div class="game-networks"><span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px;">tv</span>${g.allNetworks}</div>
+                    <div class="game-badges">
+                        ${badgesHtml}
+                    </div>
                 </div>
             </div>
         `;

@@ -109,10 +109,35 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .electric-sp { color: var(--accent-gold); font-weight: 700; display: flex; align-items: center; gap: 4px; }
 .electric-star { font-size: 14px !important; }
 
-.game-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; text-align: right; }
-.game-time { font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px; }
-.score-box { font-family: monospace; font-size: 1.1rem; }
-.game-location { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+.game-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.game-time { font-weight: 700; color: #fff; font-size: 0.9rem; }
+.game-networks { font-size: 0.75rem; color: var(--text-muted); }
+.game-location { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 2px; }
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    width: fit-content;
+    white-space: nowrap;
+}
+
+.fun-badge {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.game-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 4px;
+}
 
 .both-unseen-badge { 
     background: var(--accent-green-bg); 
