@@ -328,7 +328,7 @@ function renderSidebar() {
                     return `
                         <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
-                            ${t.name}${record}${electricIcon}
+                            ${t.name}${electricIcon}${record}
                         </div>
                     `;
                 }).join('')}
