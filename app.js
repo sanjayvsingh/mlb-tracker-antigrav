@@ -127,33 +127,41 @@ function setupListeners() {
 
 // 1. Google Sheets -> Unseen Teams
 async function fetchGoogleSheetTeams() {
-    const res = await fetch(SHEET_URL);
-    if (!res.ok) throw new Error("Sheet fetch failed");
-    const csv = await res.text();
-    const lines = csv.split('\n').filter(l => l.trim().length > 0);
-    lines.shift(); // shift header
-    
-    myUnseenTeams = [];
-    for (const line of lines) {
-        const cols = [];
-        let cur = '';
-        let inQuotes = false;
+    try {
+        const res = await fetch(SHEET_URL);
+        if (!res.ok) {
+            console.warn("Sheet fetch failed (Status: " + res.status + ")");
+            return;
+        }
+        const csv = await res.text();
+        const lines = csv.split('\n').filter(l => l.trim().length > 0);
+        lines.shift(); // shift header
         
-        for (let i = 0; i < line.length; i++) {
-            if (line[i] === '"') {
-                inQuotes = !inQuotes;
-            } else if (line[i] === ',' && !inQuotes) {
-                cols.push(cur);
-                cur = '';
-            } else {
-                cur += line[i];
+        myUnseenTeams = [];
+        for (const line of lines) {
+            const cols = [];
+            let cur = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                if (line[i] === '"') {
+                    inQuotes = !inQuotes;
+                } else if (line[i] === ',' && !inQuotes) {
+                    cols.push(cur);
+                    cur = '';
+                } else {
+                    cur += line[i];
+                }
+            }
+            cols.push(cur);
+            
+            if (cols.length > 13 && cols[13].trim()) {
+                myUnseenTeams.push(cols[13].trim());
             }
         }
-        cols.push(cur);
-        
-        if (cols.length > 13 && cols[13].trim()) {
-            myUnseenTeams.push(cols[13].trim());
-        }
+    } catch (e) {
+        console.error("Failed to load spreadsheet (it may be blocked at your current location). Falling back to all teams unseen.", e);
+        myUnseenTeams = [...MLB_OFFICIAL_NAMES]; 
     }
 }
 
@@ -223,28 +231,32 @@ async function fetchStandings() {
 
 // 3. Schedule -> 3 Day Window
 async function fetchSchedule() {
-    const today = new Date();
-    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-    const dayAfter = new Date(today); dayAfter.setDate(today.getDate() + 2);
+    try {
+        const today = new Date();
+        const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+        const dayAfter = new Date(today); dayAfter.setDate(today.getDate() + 2);
 
-    const d0Str = getLocalDateString(today);
-    const d1Str = getLocalDateString(tomorrow);
-    const d2Str = getLocalDateString(dayAfter);
-    
-    const url = `${STATS_API_BASE}/schedule?sportId=1&startDate=${d0Str}&endDate=${d2Str}&hydrate=probablePitcher,broadcasts`;
-    const res = await fetch(url);
-    const data = await res.json();
-    
-    gamesData = { today: [], tomorrow: [], dayafter: [] };
-    
-    if (data.dates) {
-        data.dates.forEach(dateObj => {
-            const games = dateObj.games.map(processGame);
-            
-            if (dateObj.date === d0Str) gamesData.today = games;
-            else if (dateObj.date === d1Str) gamesData.tomorrow = games;
-            else if (dateObj.date === d2Str) gamesData.dayafter = games;
-        });
+        const d0Str = getLocalDateString(today);
+        const d1Str = getLocalDateString(tomorrow);
+        const d2Str = getLocalDateString(dayAfter);
+        
+        const url = `${STATS_API_BASE}/schedule?sportId=1&startDate=${d0Str}&endDate=${d2Str}&hydrate=probablePitcher,broadcasts`;
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        gamesData = { today: [], tomorrow: [], dayafter: [] };
+        
+        if (data.dates) {
+            data.dates.forEach(dateObj => {
+                const games = dateObj.games.map(processGame);
+                
+                if (dateObj.date === d0Str) gamesData.today = games;
+                else if (dateObj.date === d1Str) gamesData.tomorrow = games;
+                else if (dateObj.date === d2Str) gamesData.dayafter = games;
+            });
+        }
+    } catch (e) {
+        console.error("Failed to fetch schedule:", e);
     }
 }
 
