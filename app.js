@@ -78,6 +78,14 @@ async function loadEverything() {
         renderMetrics();
         renderTabs();
         renderGames();
+
+        // Footer tooltip
+        const pauly = document.getElementById('pauly-sheep');
+        if (pauly) {
+            const sortedStarters = [...ELECTRIC_STARTERS].sort((a,b) => a.localeCompare(b));
+            const listStr = sortedStarters.slice(0, -1).join(', ') + ', and ' + sortedStarters.slice(-1);
+            pauly.title = `Electric starters are ${listStr}.`;
+        }
     }
 }
 
@@ -282,8 +290,8 @@ function processGame(game) {
         location: game.venue.name,
         funScore: gameFunScore,
         isHighFun: gameFunScore >= 8,
-        away: { name: away, unseen: awayUnseen, official: awayOfficial, sp: awaySP, electric: isElectricAway },
-        home: { name: home, unseen: homeUnseen, official: homeOfficial, sp: homeSP, electric: isElectricHome },
+        away: { name: away, nickname: awayNickname, unseen: awayUnseen, official: awayOfficial, sp: awaySP, electric: isElectricAway },
+        home: { name: home, nickname: homeNickname, unseen: homeUnseen, official: homeOfficial, sp: homeSP, electric: isElectricHome },
         bothUnseen: awayUnseen && homeUnseen,
         anyUnseen: awayUnseen || homeUnseen,
         anyElectric: isElectricAway || isElectricHome,
@@ -298,7 +306,7 @@ function renderSidebar() {
     let unseenCount = 0;
     
     // Check for teams with electric starters in the 3-day window
-    const electricInfo = new Map(); // nickname -> dateStr
+    const electricInfo = new Map(); // nickname -> { dateStr, pitcher }
     [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter].forEach(g => {
         const dateStr = formatDateForTab(g.date);
         
@@ -307,10 +315,10 @@ function renderSidebar() {
         const homeNickname = allTeamsDetailed.find(t => g.home.name.includes(t.name) || t.name.includes(g.home.name))?.name;
 
         if (g.away.electric && awayNickname && !electricInfo.has(awayNickname)) {
-            electricInfo.set(awayNickname, dateStr);
+            electricInfo.set(awayNickname, { date: dateStr, pitcher: g.away.sp });
         }
         if (g.home.electric && homeNickname && !electricInfo.has(homeNickname)) {
-            electricInfo.set(homeNickname, dateStr);
+            electricInfo.set(homeNickname, { date: dateStr, pitcher: g.home.sp });
         }
     });
     
@@ -351,8 +359,8 @@ function renderSidebar() {
                 </div>
                 ${divTeams.map(t => {
                     const record = t.hasRecord ? `<span class="team-record">(${t.wins}-${t.losses})</span>` : '';
-                    const dateStr = electricInfo.get(t.name);
-                    const electricIcon = dateStr ? `<span class="material-icons sidebar-bolt" title="Starting ${dateStr}">bolt</span>` : '';
+                    const info = electricInfo.get(t.name);
+                    const electricIcon = info ? `<span class="material-icons sidebar-bolt" title="Electric starter: ${info.pitcher} (${info.date})">bolt</span>` : '';
                     return `
                         <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
@@ -447,7 +455,6 @@ function renderGames() {
                 <div class="game-meta">
                     <div class="game-location">${g.location || ''}</div>
                     <div class="game-time">${timeStr}</div>
-                    <div class="game-networks"><span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px;">tv</span>${g.allNetworks}</div>
                     <div class="game-badges">
                         ${badgesHtml}
                     </div>
