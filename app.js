@@ -439,6 +439,7 @@ function renderGames() {
         const badgesHtml = [
             `<div class="badge fun-badge" title="Fun Score: ${g.funScore} (Teams: ${TEAM_FUN_SCORES[g.away.nickname]}+${TEAM_FUN_SCORES[g.home.nickname]}, Electric Bonus: +${g.funScore - (TEAM_FUN_SCORES[g.away.nickname] + TEAM_FUN_SCORES[g.home.nickname])})"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${g.funScore}</div>`,
             g.bothUnseen ? `<div class="badge both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : '',
+            g.anyElectric ? `<div class="badge electric-badge mobile-only"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">bolt</span>ELECTRIC SP</div>` : '',
             ...g.featuredNetworks.map(n => `<div class="badge network-badge">${n}</div>`)
         ].join('');
         

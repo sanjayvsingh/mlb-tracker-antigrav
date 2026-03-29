@@ -182,3 +182,55 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .sidebar-bolt { color: var(--accent-gold); font-size: 14px !important; vertical-align: middle; margin-left: 2px; }
 .team-record { margin-left: 6px; }
 .sidebar-fun { font-size: 11px; margin-left: 4px; opacity: 0.8; cursor: help; }
+
+/* MOBILE RESPONSIVENESS */
+.electric-badge {
+    background: rgba(234, 179, 8, 0.15);
+    color: var(--accent-gold);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+@media (min-width: 769px) {
+    .mobile-only {
+        display: none !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .app-layout { padding: 0.5rem 1rem; }
+    .main-container {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    .metrics-shelf {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .metrics-shelf .metric-card:nth-child(3),
+    .metrics-shelf .metric-card:nth-child(4) {
+        display: none;
+    }
+    .filters-row {
+        gap: 8px;
+    }
+    .filter-btn {
+        padding: 6px 10px;
+    }
+    .filter-text, .filter-label {
+        display: none;
+    }
+    .game-card-row {
+        grid-template-columns: 1fr max-content;
+        gap: 0.5rem;
+        padding: 1rem;
+    }
+    .pitcher-split {
+        display: none;
+    }
+    .game-meta {
+        /* Revert overrides, rely on desktop flex-end alignment */
+        width: auto;
+    }
+    .sidebar-right {
+        margin-top: 1rem;
+    }
+}
