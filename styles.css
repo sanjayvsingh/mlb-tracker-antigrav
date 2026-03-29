@@ -219,16 +219,30 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
         display: none;
     }
     .game-card-row {
-        grid-template-columns: 1fr max-content;
-        gap: 0.5rem;
-        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.85rem;
+    }
+    .team-split {
+        flex: 1 1 auto;
+        min-width: 0; /* Prevents flex items from overflowing parent */
+    }
+    .team-name {
+        white-space: normal;
+        word-break: break-word;
     }
     .pitcher-split {
         display: none;
     }
     .game-meta {
-        /* Revert overrides, rely on desktop flex-end alignment */
+        flex: 0 1 auto;
+        max-width: 55%; /* Forces long locations and badges to wrap */
         width: auto;
+    }
+    .game-location {
+        white-space: normal;
+        word-break: break-word;
     }
     .sidebar-right {
         margin-top: 1rem;
