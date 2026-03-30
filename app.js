@@ -20,6 +20,17 @@ const ELECTRIC_STARTERS = [
 	"Sanchez"
 ];
 
+const TEAM_ABBR = {
+    "Orioles": "BAL", "Red Sox": "BOS", "Yankees": "NYY", "Rays": "TBR", "Blue Jays": "TOR",
+    "White Sox": "CHW", "Guardians": "CLE", "Tigers": "DET", "Royals": "KCR", "Twins": "MIN",
+    "Astros": "HOU", "Angels": "LAA", "Athletics": "OAK", "Mariners": "SEA", "Rangers": "TEX",
+    "Braves": "ATL", "Marlins": "MIA", "Mets": "NYM", "Phillies": "PHI", "Nationals": "WSN",
+    "Cubs": "CHC", "Reds": "CIN", "Brewers": "MIL", "Pirates": "PIT", "Cardinals": "STL",
+    "Diamondbacks": "ARI", "Rockies": "COL", "Dodgers": "LAD", "Padres": "SDP", "Giants": "SFG"
+};
+
+const ABBR_TO_TEAM = Object.fromEntries(Object.entries(TEAM_ABBR).map(([k, v]) => [v, k]));
+
 const TEAM_FUN_SCORES = {
     "Dodgers": 5, "Athletics": 5, "Royals": 5, "Diamondbacks": 5, "Blue Jays": 5,
     "Red Sox": 4, "Braves": 4, "Mets": 4, "Reds": 4, "Phillies": 4,
@@ -67,7 +78,7 @@ async function init() {
 
 async function loadEverything() {
     try {
-        await fetchGoogleSheetTeams();
+        await fetchSavedTeams();
         loadStaticTeams();
         await Promise.all([
             fetchStandings(), // Get current year standings
@@ -125,10 +136,39 @@ function setupListeners() {
         e.currentTarget.classList.toggle('active');
         renderGames();
     });
+
+    const shareBtn = document.getElementById('share-link-btn');
+    if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+            const seenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !myUnseenTeams.some(u => u.toLowerCase() === t.toLowerCase()));
+            const seenCodes = seenTeams.map(t => TEAM_ABBR[t] || t);
+            // Manually construct the URL to keep literal commas instead of %2C
+            const urlStr = `${window.location.origin}${window.location.pathname}?seen=${seenCodes.join(',')}`;
+            navigator.clipboard.writeText(urlStr).then(() => {
+                const originalHtml = shareBtn.innerHTML;
+                shareBtn.innerHTML = '<span class="material-icons" style="font-size: 18px; color: var(--accent-green); margin-right: 6px; vertical-align: middle;">check</span> <span class="filter-text" style="font-weight: 500; vertical-align: middle;">Copied!</span>';
+                setTimeout(() => shareBtn.innerHTML = originalHtml, 2000);
+            });
+        });
+    }
 }
 
-// 1. Google Sheets -> Unseen Teams
-async function fetchGoogleSheetTeams() {
+// 1. Saved Teams (URL params -> Google Sheet fallback)
+async function fetchSavedTeams() {
+    // 1. Check URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const seenParam = urlParams.get('seen');
+    
+    if (seenParam !== null) {
+        const seenList = seenParam.split(',').map(s => {
+            const code = s.trim().toUpperCase();
+            return (ABBR_TO_TEAM[code] || s.trim()).toLowerCase();
+        });
+        myUnseenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !seenList.includes(t.toLowerCase()));
+        return;
+    }
+    
+    // 2. Fallback to Google Sheet if ?seen= is not present
     try {
         const res = await fetch(SHEET_URL);
         if (!res.ok) {
@@ -162,7 +202,7 @@ async function fetchGoogleSheetTeams() {
             }
         }
     } catch (e) {
-        console.error("Failed to load spreadsheet (it may be blocked at your current location). Falling back to all teams unseen.", e);
+        console.error("Failed to load spreadsheet. Falling back to all teams unseen.", e);
         myUnseenTeams = [...MLB_OFFICIAL_NAMES]; 
     }
 }
@@ -376,7 +416,7 @@ function renderSidebar() {
                     const info = electricInfo.get(t.name);
                     const electricIcon = info ? `<span class="material-icons sidebar-bolt" title="Electric starter: ${escapeHTML(info.pitcher)} (${escapeHTML(info.date)})">bolt</span>` : '';
                     return `
-                        <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
+                        <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}" data-team-name="${escapeHTML(t.name)}" style="cursor: pointer; user-select: none;" title="Double-click to toggle seen state">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
                             ${escapeHTML(t.name)}${electricIcon}${record}
                         </div>
@@ -386,6 +426,52 @@ function renderSidebar() {
         `;
     });
     dom.divisionsContainer.innerHTML = html;
+    
+    // Add double click listeners to toggle seen state
+    dom.divisionsContainer.querySelectorAll('.team-checklist-item').forEach(el => {
+        el.addEventListener('dblclick', (e) => {
+            const teamName = e.currentTarget.dataset.teamName;
+            toggleTeamSeen(teamName);
+            window.getSelection().removeAllRanges(); // clear accidental text selection
+        });
+    });
+}
+
+function toggleTeamSeen(teamName) {
+    const isUnseen = myUnseenTeams.some(u => u.toLowerCase() === teamName.toLowerCase());
+    if (isUnseen) {
+        // Mark as seen -> remove from myUnseenTeams
+        myUnseenTeams = myUnseenTeams.filter(u => u.toLowerCase() !== teamName.toLowerCase());
+    } else {
+        // Mark as unseen -> add to myUnseenTeams
+        myUnseenTeams.push(teamName);
+    }
+    
+    // Save new state to localStorage
+    const seenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !myUnseenTeams.some(u => u.toLowerCase() === t.toLowerCase()));
+    localStorage.setItem('mlbTrackerSeen', JSON.stringify(seenTeams));
+    
+    // Update the URL invisibly so refreshing doesn't lose progress if they was using a share link
+    const seenCodes = seenTeams.map(t => TEAM_ABBR[t] || t);
+    const urlStr = `${window.location.origin}${window.location.pathname}?seen=${seenCodes.join(',')}`;
+    window.history.replaceState({}, '', urlStr);
+    
+    // Update allTeamsDetailed
+    const teamObj = allTeamsDetailed.find(t => t.name === teamName);
+    if (teamObj) teamObj.unseen = !isUnseen;
+    
+    // Re-evaluate game objects
+    [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter].forEach(g => {
+        g.away.unseen = isTeamMatch(g.away.name);
+        g.home.unseen = isTeamMatch(g.home.name);
+        g.bothUnseen = g.away.unseen && g.home.unseen;
+        g.anyUnseen = g.away.unseen || g.home.unseen;
+    });
+    
+    // Re-render affected parts
+    renderSidebar();
+    renderMetrics();
+    renderGames();
 }
 
 function renderMetrics() {
