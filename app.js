@@ -69,8 +69,10 @@ async function loadEverything() {
     try {
         await fetchGoogleSheetTeams();
         loadStaticTeams();
-        await fetchStandings(); // Get current year standings
-        await fetchSchedule();
+        await Promise.all([
+            fetchStandings(), // Get current year standings
+            fetchSchedule()
+        ]);
     } catch (e) {
         console.error("Load error:", e);
     } finally {
@@ -323,8 +325,8 @@ function renderSidebar() {
         const dateStr = formatDateForTab(g.date);
         
         // Find the nickname for away and home teams
-        const awayNickname = allTeamsDetailed.find(t => g.away.name.includes(t.name) || t.name.includes(g.away.name))?.name;
-        const homeNickname = allTeamsDetailed.find(t => g.home.name.includes(t.name) || t.name.includes(g.home.name))?.name;
+        const awayNickname = g.away.nickname;
+        const homeNickname = g.home.nickname;
 
         if (g.away.electric && awayNickname && !electricInfo.has(awayNickname)) {
             electricInfo.set(awayNickname, { date: dateStr, pitcher: g.away.sp });
@@ -366,17 +368,17 @@ function renderSidebar() {
         html += `
             <div class="division-group">
                 <div class="division-header">
-                    <span>${div}</span>
+                    <span>${escapeHTML(div)}</span>
                     <span class="division-counts">${unseenInDiv}/5 Unseen</span>
                 </div>
                 ${divTeams.map(t => {
-                    const record = t.hasRecord ? `<span class="team-record">(${t.wins}-${t.losses})</span>` : '';
+                    const record = t.hasRecord ? `<span class="team-record">(${escapeHTML(t.wins)}-${escapeHTML(t.losses)})</span>` : '';
                     const info = electricInfo.get(t.name);
-                    const electricIcon = info ? `<span class="material-icons sidebar-bolt" title="Electric starter: ${info.pitcher} (${info.date})">bolt</span>` : '';
+                    const electricIcon = info ? `<span class="material-icons sidebar-bolt" title="Electric starter: ${escapeHTML(info.pitcher)} (${escapeHTML(info.date)})">bolt</span>` : '';
                     return `
                         <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
-                            ${t.name}${electricIcon}${record}
+                            ${escapeHTML(t.name)}${electricIcon}${record}
                         </div>
                     `;
                 }).join('')}
@@ -435,12 +437,12 @@ function renderGames() {
     }
     
     dom.gamesContainer.innerHTML = filtered.map(g => {
-        const timeStr = g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET';
+        const timeStr = escapeHTML(g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET');
         const badgesHtml = [
-            `<div class="badge fun-badge" title="Fun Score: ${g.funScore} (Teams: ${TEAM_FUN_SCORES[g.away.nickname]}+${TEAM_FUN_SCORES[g.home.nickname]}, Electric Bonus: +${g.funScore - (TEAM_FUN_SCORES[g.away.nickname] + TEAM_FUN_SCORES[g.home.nickname])})"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${g.funScore}</div>`,
+            `<div class="badge fun-badge" title="Fun Score: ${escapeHTML(g.funScore)} (Teams: ${escapeHTML(TEAM_FUN_SCORES[g.away.nickname])}+${escapeHTML(TEAM_FUN_SCORES[g.home.nickname])}, Electric Bonus: +${escapeHTML(g.funScore - (TEAM_FUN_SCORES[g.away.nickname] + TEAM_FUN_SCORES[g.home.nickname]))})"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${escapeHTML(g.funScore)}</div>`,
             g.bothUnseen ? `<div class="badge both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : '',
             g.anyElectric ? `<div class="badge electric-badge mobile-only"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">bolt</span>ELECTRIC SP</div>` : '',
-            ...g.featuredNetworks.map(n => `<div class="badge network-badge">${n}</div>`)
+            ...g.featuredNetworks.map(n => `<div class="badge network-badge">${escapeHTML(n)}</div>`)
         ].join('');
         
         return `
@@ -448,25 +450,25 @@ function renderGames() {
                 <div class="team-split">
                     <div class="matchup-team">
                         ${g.away.official ? (g.away.unseen ? `<span class="material-icons unseen-icon">visibility</span>` : `<span class="material-icons seen-icon">check</span>`) : ''}
-                        <span class="team-name ${g.away.unseen ? 'unseen-text' : ''}">${g.away.name}</span>
+                        <span class="team-name ${g.away.unseen ? 'unseen-text' : ''}">${escapeHTML(g.away.name)}</span>
                     </div>
                     <div class="matchup-team">
                         ${g.home.official ? (g.home.unseen ? `<span class="material-icons unseen-icon">visibility</span>` : `<span class="material-icons seen-icon">check</span>`) : ''}
-                        <span class="team-name ${g.home.unseen ? 'unseen-text' : ''}">${g.home.name}</span>
+                        <span class="team-name ${g.home.unseen ? 'unseen-text' : ''}">${escapeHTML(g.home.name)}</span>
                     </div>
                 </div>
                 
                 <div class="pitcher-split">
                     <div class="${g.away.electric ? 'electric-sp' : ''}">
-                        ${g.away.sp} ${g.away.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
+                        ${escapeHTML(g.away.sp)} ${g.away.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
                     </div>
                     <div class="${g.home.electric ? 'electric-sp' : ''}">
-                        ${g.home.sp} ${g.home.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
+                        ${escapeHTML(g.home.sp)} ${g.home.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
                     </div>
                 </div>
                 
                 <div class="game-meta">
-                    <div class="game-location">${g.location || ''}</div>
+                    <div class="game-location">${escapeHTML(g.location || '')}</div>
                     <div class="game-time">${timeStr}</div>
                     <div class="game-badges">
                         ${badgesHtml}
@@ -478,6 +480,16 @@ function renderGames() {
 }
 
 // Utils
+function escapeHTML(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function isTeamMatch(name) {
     return myUnseenTeams.some(u => name.toLowerCase().includes(u.toLowerCase()) || u.toLowerCase().includes(name.toLowerCase()));
 }
