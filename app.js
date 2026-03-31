@@ -155,8 +155,8 @@ function setupListeners() {
     const resetBtn = document.getElementById('reset-btn');
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
-            if (confirm("Reset tracking completely and revert back to the Google Sheet data?")) {
-                localStorage.removeItem('mlbTrackerSeen');
+            if (confirm("Clear all locally saved progress and tracking?")) {
+                localStorage.clear();
                 window.location.href = window.location.origin + window.location.pathname;
             }
         });
@@ -173,22 +173,8 @@ function setupListeners() {
     });
 }
 
-// 1. Saved Teams (URL params -> Google Sheet fallback)
-async function fetchSavedTeams() {
-    // 1. Check URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const seenParam = urlParams.get('seen');
-    
-    if (seenParam !== null) {
-        const seenList = seenParam.split(',').map(s => {
-            const code = s.trim().toUpperCase();
-            return (ABBR_TO_TEAM[code] || s.trim()).toLowerCase();
-        });
-        myUnseenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !seenList.includes(t.toLowerCase()));
-        return;
-    }
-    
-    // 2. Fallback to Google Sheet if ?seen= is not present
+/// 1. Google Sheet Fetcher Helper
+async function fetchGoogleSheet() {
     try {
         const res = await fetch(SHEET_URL);
         if (!res.ok) {
@@ -205,27 +191,72 @@ async function fetchSavedTeams() {
             const cols = [];
             let cur = '';
             let inQuotes = false;
-            
             for (let i = 0; i < line.length; i++) {
-                if (line[i] === '"') {
-                    inQuotes = !inQuotes;
-                } else if (line[i] === ',' && !inQuotes) {
-                    cols.push(cur);
-                    cur = '';
-                } else {
-                    cur += line[i];
-                }
+                if (line[i] === '"') inQuotes = !inQuotes;
+                else if (line[i] === ',' && !inQuotes) { cols.push(cur); cur = ''; }
+                else cur += line[i];
             }
             cols.push(cur);
-            
             if (cols.length > 13 && cols[13].trim()) {
                 myUnseenTeams.push(cols[13].trim());
             }
         }
     } catch (e) {
-        console.error("Failed to load spreadsheet. Falling back to all teams unseen.", e);
+        console.error("Failed to load spreadsheet.", e);
         myUnseenTeams = [...MLB_OFFICIAL_NAMES]; 
     }
+}
+
+// 2. Saved Teams (Owner vs Friends)
+async function fetchSavedTeams() {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Check for owner initialization
+    if (urlParams.get('u') === 's') {
+        localStorage.setItem('mlbTrackerOwner', 'true');
+        urlParams.delete('u');
+        const newUrl = window.location.origin + window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+        window.history.replaceState({}, document.title, newUrl);
+    }
+    
+    const isOwner = localStorage.getItem('mlbTrackerOwner') === 'true';
+    const seenParam = urlParams.get('seen');
+    
+    // Rule 1: Shared Links (?seen=)
+    if (seenParam !== null) {
+        const seenList = seenParam.split(',').map(s => {
+            const code = s.trim().toUpperCase();
+            return (ABBR_TO_TEAM[code] || s.trim()).toLowerCase();
+        });
+        myUnseenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !seenList.includes(t.toLowerCase()));
+        
+        if (!isOwner) {
+            localStorage.setItem('mlbTrackerSeen', JSON.stringify(seenList));
+        }
+        urlParams.delete('seen');
+        const newUrl = window.location.origin + window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+        window.history.replaceState({}, document.title, newUrl);
+        return;
+    }
+    
+    // Rule 2: Owners always get the Google Sheet
+    if (isOwner) {
+        await fetchGoogleSheet();
+        return;
+    }
+    
+    // Rule 3: Friends get their personal Local Storage
+    const localSeen = localStorage.getItem('mlbTrackerSeen');
+    if (localSeen) {
+        try {
+            const seenList = JSON.parse(localSeen);
+            myUnseenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !seenList.includes(t.toLowerCase()));
+            return;
+        } catch(e) {}
+    }
+    
+    // Rule 4: Blank Slate for new friends
+    myUnseenTeams = [...MLB_OFFICIAL_NAMES];
 }
 
 // 2. Load 30 Teams Statically
@@ -450,25 +481,20 @@ function renderSidebar() {
 }
 
 function toggleTeamSeen(teamName) {
+    const isOwner = localStorage.getItem('mlbTrackerOwner') === 'true';
     const isUnseen = myUnseenTeams.some(u => u.toLowerCase() === teamName.toLowerCase());
     if (isUnseen) {
-        // Mark as seen -> remove from myUnseenTeams
         myUnseenTeams = myUnseenTeams.filter(u => u.toLowerCase() !== teamName.toLowerCase());
     } else {
-        // Mark as unseen -> add to myUnseenTeams
         myUnseenTeams.push(teamName);
     }
     
-    // Save new state to localStorage
-    const seenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !myUnseenTeams.some(u => u.toLowerCase() === t.toLowerCase()));
-    localStorage.setItem('mlbTrackerSeen', JSON.stringify(seenTeams));
+    // Friends save their state to localStorage
+    if (!isOwner) {
+        const seenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !myUnseenTeams.some(u => u.toLowerCase() === t.toLowerCase()));
+        localStorage.setItem('mlbTrackerSeen', JSON.stringify(seenTeams));
+    }
     
-    // Update the URL invisibly so refreshing doesn't lose progress if they was using a share link
-    const seenCodes = seenTeams.map(t => TEAM_ABBR[t] || t);
-    const urlStr = `${window.location.origin}${window.location.pathname}?seen=${seenCodes.join(',')}`;
-    window.history.replaceState({}, '', urlStr);
-    
-    // Update allTeamsDetailed
     const teamObj = allTeamsDetailed.find(t => t.name === teamName);
     if (teamObj) teamObj.unseen = !isUnseen;
     
