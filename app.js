@@ -151,6 +151,26 @@ function setupListeners() {
             });
         });
     }
+
+    const resetBtn = document.getElementById('reset-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            if (confirm("Reset tracking completely and revert back to the Google Sheet data?")) {
+                localStorage.removeItem('mlbTrackerSeen');
+                window.location.href = window.location.origin + window.location.pathname;
+            }
+        });
+    }
+
+    // Event delegation for toggling team seen state
+    dom.divisionsContainer.addEventListener('dblclick', (e) => {
+        const teamItem = e.target.closest('.team-checklist-item');
+        if (teamItem) {
+            const teamName = teamItem.dataset.teamName;
+            if (teamName) toggleTeamSeen(teamName);
+            window.getSelection().removeAllRanges(); // clear accidental text selection
+        }
+    });
 }
 
 // 1. Saved Teams (URL params -> Google Sheet fallback)
@@ -173,6 +193,7 @@ async function fetchSavedTeams() {
         const res = await fetch(SHEET_URL);
         if (!res.ok) {
             console.warn("Sheet fetch failed (Status: " + res.status + ")");
+            myUnseenTeams = [...MLB_OFFICIAL_NAMES];
             return;
         }
         const csv = await res.text();
@@ -426,15 +447,6 @@ function renderSidebar() {
         `;
     });
     dom.divisionsContainer.innerHTML = html;
-    
-    // Add double click listeners to toggle seen state
-    dom.divisionsContainer.querySelectorAll('.team-checklist-item').forEach(el => {
-        el.addEventListener('dblclick', (e) => {
-            const teamName = e.currentTarget.dataset.teamName;
-            toggleTeamSeen(teamName);
-            window.getSelection().removeAllRanges(); // clear accidental text selection
-        });
-    });
 }
 
 function toggleTeamSeen(teamName) {

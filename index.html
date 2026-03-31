@@ -117,10 +117,14 @@
                 <div class="divisions-container" id="divisions-container">
                     <div class="loading-state">Loading standings...</div>
                 </div>
-                <div class="sidebar-footer" style="padding: 16px; text-align: center; border-top: 1px solid var(--border-color);">
-                    <button id="share-link-btn" class="filter-btn" style="width: 100%; justify-content: center; background-color: var(--surface-light); border: 1px solid var(--border-color);">
+                <div class="sidebar-footer" style="padding: 16px; display: flex; gap: 8px; border-top: 1px solid var(--border-color);">
+                    <button id="share-link-btn" class="filter-btn" style="flex: 1; justify-content: center; background-color: var(--surface-light); border: 1px solid var(--border-color);">
                         <span class="material-icons" style="font-size: 18px; color: var(--text-muted); margin-right: 6px; vertical-align: middle;">share</span>
-                        <span class="filter-text" style="font-weight: 500; vertical-align: middle;">Copy Share Link</span>
+                        <span class="filter-text" style="font-weight: 500; vertical-align: middle;">Share</span>
+                    </button>
+                    <button id="reset-btn" class="filter-btn" style="flex: 1; justify-content: center; background-color: var(--surface-light); border: 1px solid var(--border-color);">
+                        <span class="material-icons" style="font-size: 18px; color: var(--text-muted); margin-right: 6px; vertical-align: middle;">refresh</span>
+                        <span class="filter-text" style="font-weight: 500; vertical-align: middle;">Reset</span>
                     </button>
                 </div>
             </aside>
@@ -131,7 +135,7 @@
                 <span id="pauly-sheep">from Pauly Sheep</span>
                 <span class="footer-separator">&bull;</span>
                 <span class="material-icons" style="color: var(--accent-blue); font-size: 14px; vertical-align: middle;">diamond</span>
-                <span>from <a href="https://www.joeposnanski.com/p/the-most-fun-teams-in-baseball" target="_blank" class="footer-link">Joe Posnanski</a></span>
+                <span>from <a href="https://www.joeposnanski.com/p/the-most-fun-teams-in-baseball" target="_blank" rel="noopener noreferrer" class="footer-link">Joe Posnanski</a></span>
             </div>
         </footer>
     </div>
