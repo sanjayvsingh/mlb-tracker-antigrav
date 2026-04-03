@@ -68,6 +68,7 @@ let activeTab = 'today';
 let filters = { bothUnseen: false, featured: false, electric: false, funGames: false };
 let hotHitters = new Map();     // team nickname -> [{name, stat}]
 let milestoneWatch = new Map(); // team nickname -> [{name, description}]
+let gameOddsMap = new Map();    // MLBGameId (gamePk) -> { home, away, diff }
 
 // DOM Maps
 const dom = {
@@ -93,11 +94,18 @@ async function loadEverything() {
     try {
         await fetchSavedTeams();
         loadStaticTeams();
-        // Fetch standings + hot hitters/milestones in parallel first,
-        // THEN fetch schedule (processGame needs both maps ready)
+        // Fetch standings + hot hitters/milestones + odds in parallel first,
+        // THEN fetch schedule (processGame needs all maps ready)
+        const today = getToday();
+        const d0Str = getLocalDateString(today);
+        const d1 = new Date(today); d1.setDate(today.getDate() + 1);
+        const d2 = new Date(today); d2.setDate(today.getDate() + 2);
         await Promise.all([
             fetchStandings(),
-            fetchHotHittersAndMilestones()
+            fetchHotHittersAndMilestones(),
+            fetchGameOdds(d0Str),
+            fetchGameOdds(getLocalDateString(d1)),
+            fetchGameOdds(getLocalDateString(d2))
         ]);
         await fetchSchedule();
     } catch (e) {
@@ -301,6 +309,27 @@ function loadStaticTeams() {
     }
 }
 
+// 2.5 FanGraphs Game Odds
+async function fetchGameOdds(dateStr) {
+    try {
+        const url = `https://www.fangraphs.com/api/scores/live-all?gamedate=${dateStr}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        (Array.isArray(data) ? data : []).forEach(entry => {
+            const sched = entry.schedule;
+            if (!sched || !sched.MLBGameId) return;
+            const home = sched.HomeGameOdds ?? null;
+            const away = sched.AwayGameOdds ?? null;
+            if (home === null || away === null) return;
+            const diff = Math.abs(home - away);
+            gameOddsMap.set(sched.MLBGameId, { home, away, diff });
+        });
+    } catch (e) {
+        console.warn('FanGraphs odds fetch failed for', dateStr, e);
+    }
+}
+
 // 2.5 Hot Hitters & Milestone Watch
 async function fetchHotHittersAndMilestones() {
     const year = getToday().getFullYear();
@@ -443,7 +472,7 @@ async function fetchSchedule() {
         
         if (data.dates) {
             data.dates.forEach(dateObj => {
-                const games = dateObj.games.map(processGame);
+                const games = dateObj.games.map(processGame).sort((a,b) => a.date - b.date);
                 
                 if (dateObj.date === d0Str) gamesData.today = games;
                 else if (dateObj.date === d1Str) gamesData.tomorrow = games;
@@ -513,6 +542,16 @@ function processGame(game) {
     if (isElectricAway) gameFunScore += 1;
     if (isElectricHome) gameFunScore += 1;
 
+    // Game odds bonus/penalty from FanGraphs
+    const oddsEntry = gameOddsMap.get(game.gamePk);
+    let oddsBonus = 0;
+    if (oddsEntry) {
+        if (oddsEntry.diff < 0.04)       oddsBonus = 2;  // very close
+        else if (oddsEntry.diff < 0.1)   oddsBonus = 1;  // close
+        else if (oddsEntry.diff > 0.25)  oddsBonus = -1; // lopsided
+    }
+    gameFunScore += oddsBonus;
+
     // Hot Hitters bonus (+1 per unique hot hitter in this game)
     const awayHotHitters = (hotHitters.get(awayNickname) || []).map(h => ({...h, team: awayNickname}));
     const homeHotHitters = (hotHitters.get(homeNickname) || []).map(h => ({...h, team: homeNickname}));
@@ -540,7 +579,9 @@ function processGame(game) {
         featuredNetworks: featuredNetworks,
         featuredEventBonus: featuredEventBonus,
         hotHitterInfo: allGameHotHitters,
-        milestoneInfo: allGameMilestones
+        milestoneInfo: allGameMilestones,
+        oddsBonus: oddsBonus,
+        oddsEntry: oddsEntry || null
     };
 }
 
@@ -721,11 +762,16 @@ function renderGames() {
             
             if (awayScore > 0) components.push(`${awayScore} ${g.away.nickname}`);
             if (homeScore > 0) components.push(`${homeScore} ${g.home.nickname}`);
-            if (electric > 0) components.push(`+${electric} electric starters`);
-            if (hotBonus > 0) components.push(`+${hotBonus} hot hitters`);
-            if (milestoneBonus > 0) components.push(`+${milestoneBonus} milestones`);
+            if (electric > 0) components.push(`+${electric} Electric starter`);
+            if (hotBonus > 0) components.push(`+${hotBonus} Hot hitters`);
+            if (milestoneBonus > 0) components.push(`+${milestoneBonus} Milestones`);
+            if (g.oddsBonus !== 0 && g.oddsEntry) {
+                const pct = (g.oddsEntry.diff * 100).toFixed(1);
+                const label = g.oddsBonus > 0 ? (g.oddsBonus === 2 ? 'Very close game' : 'Close game') : 'Lopsided game';
+                components.push(`${g.oddsBonus > 0 ? '+' : ''}${g.oddsBonus} ${label} (${pct}% spread)`);
+            }
             
-            return `Fun Score: ${g.funScore}${components.length > 0 ? ` (${components.join(', ')})` : ''}`;
+            return `Fun score: ${g.funScore}${components.length > 0 ? ` (${components.join(', ')})` : ''}`;
         })();
         const hotHitterTooltip = g.hotHitterInfo.map(h => `${h.name} (${h.stat})`).join(', ');
         const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');

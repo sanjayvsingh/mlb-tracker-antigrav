@@ -19,10 +19,31 @@ While built for personal use, it's also a great way for any fan to see what inte
 - **Material Icons**: Clean, consistent UI using Material Design iconography.
 - **Mobile Responsive**: Designed to look great on any device.
 
+## 📡 API Usage
+
+The application integrates data from multiple real-time sources to calculate the **Fun Score**:
+
+- **MLB Stats API**:
+  - `standings`: Fetches division ranks and win/loss records.
+  - `stats/leaders`: Identifies "Hot Hitters" (league leaders in HR, SLG, OPS) and players near career milestones.
+  - `schedule`: Retrieves the 3-day game window, hydrated with `probablePitcher` and `broadcasts`.
+- **FanGraphs API**:
+  - `scores/live-all`: Fetches real-time game odds used to calculate competitiveness bonuses (Close Game +1, Very Close +2, Lopsided -1).
+
+## 🔗 URL Parameters
+
+You can customize the application state using the following parameters:
+
+| Parameter | Value | Description |
+| :--- | :--- | :--- |
+| `u` | `s` | **Owner Mode**: Initializes your local device as the "Owner" to sync with the master Google Sheet. |
+| `seen` | `CSV` (e.g., `ARI,ATL`) | **Share Mode**: Overrides local seen status with a specific list of team abbreviations (ideal for sharing with friends). |
+| `debugDate`| `YYYY-MM-DD` | **Debug Mode**: Mocks the "current" date to view historical or future schedules and odds data. |
+
 ## 🛠️ Tech Stack
 
 - **Frontend**: Vanilla HTML5, JavaScript (ES6+), CSS3.
-- **Data Source**: MLB Stats API & Google Sheets (for personal tracking).
+- **Data Source**: MLB Stats API & FanGraphs API.
 - **Icons**: [Material Icons](https://fonts.google.com/icons)
 
 ## 🎯 Goal
