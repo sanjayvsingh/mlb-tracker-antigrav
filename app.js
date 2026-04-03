@@ -294,9 +294,14 @@ function loadStaticTeams() {
 async function fetchHotHittersAndMilestones() {
     const year = new Date().getFullYear();
 
-    // --- HOT HITTERS: top 5 season HR and batting average leaders ---
+    // --- HOT HITTERS: season leaders in HR, SLG, and OPS ---
     try {
-        const url = `${STATS_API_BASE}/stats/leaders?leaderCategories=homeRuns,battingAverage&statGroup=hitting&limit=5&season=${year}`;
+        // Use a smaller pool early in the season when sample sizes are tiny
+        const now = new Date();
+        const may1 = new Date(now.getFullYear(), 4, 1); // month is 0-indexed
+        const leaderLimit = now < may1 ? 3 : 5;
+
+        const url = `${STATS_API_BASE}/stats/leaders?leaderCategories=homeRuns,sluggingPercentage,onBasePlusSlugging&statGroup=hitting&limit=${leaderLimit}&season=${year}`;
         const res = await fetch(url);
         const data = await res.json();
         (data.leagueLeaders || []).forEach(cat => {
@@ -305,9 +310,14 @@ async function fetchHotHittersAndMilestones() {
                 if (!nickname) return;
                 if (!hotHitters.has(nickname)) hotHitters.set(nickname, []);
                 const rawVal = leader.value || '0';
-                const statLabel = cat.leaderCategory === 'homeRuns'
-                    ? `${rawVal} HR`
-                    : `${parseFloat(rawVal).toFixed(3).replace(/^0/, '')} AVG`;
+                let statLabel;
+                if (cat.leaderCategory === 'homeRuns') {
+                    statLabel = `${rawVal} HR`;
+                } else if (cat.leaderCategory === 'sluggingPercentage') {
+                    statLabel = `${parseFloat(rawVal).toFixed(3).replace(/^0/, '')} SLG`;
+                } else {
+                    statLabel = `${parseFloat(rawVal).toFixed(3).replace(/^0/, '')} OPS`;
+                }
                 // Avoid duplicate player entries across categories
                 const existing = hotHitters.get(nickname);
                 if (!existing.some(h => h.name === leader.person.fullName)) {
@@ -657,11 +667,12 @@ function renderGames() {
     dom.gamesContainer.innerHTML = filtered.map(g => {
         const timeStr = escapeHTML(g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET');
         const funTooltip = (() => {
-            const base = (TEAM_FUN_SCORES[g.away.nickname] || 0) + (TEAM_FUN_SCORES[g.home.nickname] || 0);
+            const awayScore = TEAM_FUN_SCORES[g.away.nickname] || 0;
+            const homeScore = TEAM_FUN_SCORES[g.home.nickname] || 0;
             const electric = (g.away.electric ? 1 : 0) + (g.home.electric ? 1 : 0);
             const hotBonus = g.hotHitterInfo.length;
             const milestoneBonus = g.milestoneInfo.length * 2;
-            return `Fun Score: ${g.funScore} (Base: ${base}, Electric: +${electric}, Hot Hitters: +${hotBonus}, Milestones: +${milestoneBonus})`;
+            return `Fun Score: ${g.funScore} (${g.away.nickname}: ${awayScore}, ${g.home.nickname}: ${homeScore}, Electric: +${electric}, Hot Hitters: +${hotBonus}, Milestones: +${milestoneBonus})`;
         })();
         const hotHitterTooltip = g.hotHitterInfo.map(h => `${h.name} (${h.stat})`).join(', ');
         const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');
