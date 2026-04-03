@@ -512,7 +512,6 @@ function processGame(game) {
     let gameFunScore = awayFun + homeFun;
     if (isElectricAway) gameFunScore += 1;
     if (isElectricHome) gameFunScore += 1;
-    gameFunScore += featuredEventBonus * 2;
 
     // Hot Hitters bonus (+1 per unique hot hitter in this game)
     const awayHotHitters = (hotHitters.get(awayNickname) || []).map(h => ({...h, team: awayNickname}));
@@ -713,13 +712,20 @@ function renderGames() {
     dom.gamesContainer.innerHTML = filtered.map(g => {
         const timeStr = escapeHTML(g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET');
         const funTooltip = (() => {
+            const components = [];
             const awayScore = TEAM_FUN_SCORES[g.away.nickname] || 0;
             const homeScore = TEAM_FUN_SCORES[g.home.nickname] || 0;
             const electric = (g.away.electric ? 1 : 0) + (g.home.electric ? 1 : 0);
             const hotBonus = g.hotHitterInfo.length;
             const milestoneBonus = g.milestoneInfo.length * 2;
-            const featuredBonus = g.featuredEventBonus * 2;
-            return `Fun Score: ${g.funScore} (${g.away.nickname}: ${awayScore}, ${g.home.nickname}: ${homeScore}, Electric: +${electric}, Hot Hitters: +${hotBonus}, Milestones: +${milestoneBonus}, Featured: +${featuredBonus})`;
+            
+            if (awayScore > 0) components.push(`${awayScore} ${g.away.nickname}`);
+            if (homeScore > 0) components.push(`${homeScore} ${g.home.nickname}`);
+            if (electric > 0) components.push(`+${electric} electric starters`);
+            if (hotBonus > 0) components.push(`+${hotBonus} hot hitters`);
+            if (milestoneBonus > 0) components.push(`+${milestoneBonus} milestones`);
+            
+            return `Fun Score: ${g.funScore}${components.length > 0 ? ` (${components.join(', ')})` : ''}`;
         })();
         const hotHitterTooltip = g.hotHitterInfo.map(h => `${h.name} (${h.stat})`).join(', ');
         const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');
@@ -755,7 +761,6 @@ function renderGames() {
                 </div>
                 
                 <div class="game-meta">
-                    <div class="game-location">${escapeHTML(g.location || '')}</div>
                     <div class="game-time">${timeStr}</div>
                     <div class="game-badges">
                         ${badgesHtml}
