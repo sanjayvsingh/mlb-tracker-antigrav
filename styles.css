@@ -180,6 +180,7 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .footer-link:hover { color: var(--accent-gold); border-bottom-color: var(--accent-gold); }
 
 .sidebar-bolt { color: var(--accent-gold); font-size: 14px !important; vertical-align: middle; margin-left: 2px; }
+.sidebar-featured { color: var(--accent-blue); font-size: 13px !important; vertical-align: middle; margin-left: 2px; cursor: help; }
 .team-record { margin-left: 6px; }
 .sidebar-fun { font-size: 11px; margin-left: 4px; opacity: 0.8; cursor: help; }
 

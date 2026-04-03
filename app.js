@@ -48,6 +48,17 @@ function getLocalDateString(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Returns today's date, or a debug override via ?debugDate=YYYY-MM-DD
+function getToday() {
+    const params = new URLSearchParams(window.location.search);
+    const debug = params.get('debugDate');
+    if (debug) {
+        const d = new Date(debug + 'T12:00:00'); // noon to avoid timezone edge cases
+        if (!isNaN(d)) return d;
+    }
+    return new Date();
+}
+
 // State
 let myUnseenTeams = []; 
 let allTeamsDetailed = []; // From standings
@@ -292,12 +303,12 @@ function loadStaticTeams() {
 
 // 2.5 Hot Hitters & Milestone Watch
 async function fetchHotHittersAndMilestones() {
-    const year = new Date().getFullYear();
+    const year = getToday().getFullYear();
 
     // --- HOT HITTERS: season leaders in HR, SLG, and OPS ---
     try {
         // Use a smaller pool early in the season when sample sizes are tiny
-        const now = new Date();
+        const now = getToday();
         const may1 = new Date(now.getFullYear(), 4, 1); // month is 0-indexed
         const leaderLimit = now < may1 ? 3 : 5;
 
@@ -373,7 +384,7 @@ function findNicknameFromApiName(apiTeamName) {
 // 2.5 Standings -> Rank and Record
 async function fetchStandings() {
     try {
-        const year = new Date().getFullYear();
+        const year = getToday().getFullYear();
         const url = `${STATS_API_BASE}/standings?leagueId=103,104&season=${year}&standingsTypes=regularSeason`;
         const res = await fetch(url);
         const data = await res.json();
@@ -416,7 +427,7 @@ async function fetchStandings() {
 // 3. Schedule -> 3 Day Window
 async function fetchSchedule() {
     try {
-        const today = new Date();
+        const today = getToday();
         const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
         const dayAfter = new Date(today); dayAfter.setDate(today.getDate() + 2);
 
@@ -471,6 +482,28 @@ function processGame(game) {
         });
     }
     
+    // Static featured events (from featured-events.js)
+    const gameDateStr = game.gameDate.substring(0, 10); // e.g. "2026-04-15"
+    let featuredEventBonus = 0;
+    FEATURED_EVENTS.forEach(event => {
+        if (!event.dates.includes(gameDateStr)) return;
+        if (event.teams === null) {
+            // All games on this date are featured (e.g. Jackie Robinson Day)
+            if (!featuredNetworks.includes(event.label)) {
+                featuredNetworks.push(event.label);
+                featuredEventBonus++;
+            }
+        } else {
+            // Both specified teams must be in this matchup
+            const teamsInGame = [away, home];
+            const allMatch = event.teams.every(t => teamsInGame.some(name => name.includes(t) || t.includes(name)));
+            if (allMatch && !featuredNetworks.includes(event.label)) {
+                featuredNetworks.push(event.label);
+                featuredEventBonus++;
+            }
+        }
+    });
+
     // Calculate Fun Score
     const awayNickname = allTeamsDetailed.find(t => away.includes(t.name) || t.name.includes(away))?.name || away;
     const homeNickname = allTeamsDetailed.find(t => home.includes(t.name) || t.name.includes(home))?.name || home;
@@ -479,6 +512,7 @@ function processGame(game) {
     let gameFunScore = awayFun + homeFun;
     if (isElectricAway) gameFunScore += 1;
     if (isElectricHome) gameFunScore += 1;
+    gameFunScore += featuredEventBonus * 2;
 
     // Hot Hitters bonus (+1 per unique hot hitter in this game)
     const awayHotHitters = (hotHitters.get(awayNickname) || []).map(h => ({...h, team: awayNickname}));
@@ -505,6 +539,7 @@ function processGame(game) {
         anyElectric: isElectricAway || isElectricHome,
         allNetworks: allNetworks.length > 0 ? allNetworks.join(', ') : 'No TV Info',
         featuredNetworks: featuredNetworks,
+        featuredEventBonus: featuredEventBonus,
         hotHitterInfo: allGameHotHitters,
         milestoneInfo: allGameMilestones
     };
@@ -517,6 +552,15 @@ function renderSidebar() {
     
     // Check for teams with electric starters in the 3-day window
     const electricInfo = new Map(); // nickname -> { dateStr, pitcher }
+
+    // Check for teams in featured events in the 3-day window
+    const featuredTeamInfo = new Map(); // nickname -> event label
+    [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter].forEach(g => {
+        if (!g.featuredEventBonus) return;
+        const eventLabel = g.featuredNetworks.find(n => FEATURED_EVENTS.some(e => e.label === n)) || 'Featured Event';
+        if (g.away.nickname && !featuredTeamInfo.has(g.away.nickname)) featuredTeamInfo.set(g.away.nickname, eventLabel);
+        if (g.home.nickname && !featuredTeamInfo.has(g.home.nickname)) featuredTeamInfo.set(g.home.nickname, eventLabel);
+    });
     [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter].forEach(g => {
         const dateStr = formatDateForTab(g.date);
         
@@ -571,10 +615,12 @@ function renderSidebar() {
                     const record = t.hasRecord ? `<span class="team-record">(${escapeHTML(t.wins)}-${escapeHTML(t.losses)})</span>` : '';
                     const info = electricInfo.get(t.name);
                     const electricIcon = info ? `<span class="material-icons sidebar-bolt" title="Electric starter: ${escapeHTML(info.pitcher)} (${escapeHTML(info.date)})">bolt</span>` : '';
+                    const featuredLabel = featuredTeamInfo.get(t.name);
+                    const featuredIcon = featuredLabel ? `<span class="material-icons sidebar-featured" title="Featured game: ${escapeHTML(featuredLabel)}">diamond</span>` : '';
                     return `
                         <div class="team-checklist-item ${t.unseen ? 'is-unseen' : 'is-seen'}" data-team-name="${escapeHTML(t.name)}" style="cursor: pointer; user-select: none;" title="Double-click to toggle seen state">
                             ${t.unseen ? '' : '<div class="custom-checkbox"><span class="material-icons">check</span></div>'}
-                            ${escapeHTML(t.name)}${electricIcon}${record}
+                            ${escapeHTML(t.name)}${electricIcon}${featuredIcon}${record}
                         </div>
                     `;
                 }).join('')}
@@ -632,7 +678,7 @@ function renderMetrics() {
 
 function renderTabs() {
     // Just populate dates dynamically onto the tabs
-    const d0 = new Date();
+    const d0 = getToday();
     const d1 = new Date(d0); d1.setDate(d0.getDate() + 1);
     const d2 = new Date(d0); d2.setDate(d0.getDate() + 2);
     
@@ -647,7 +693,7 @@ function renderTabs() {
 
 function renderGames() {
     const list = gamesData[activeTab] || [];
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const oneHourAgo = new Date(getToday() - 60 * 60 * 1000);
     
     // Apply filters
     const filtered = list.filter(g => {
@@ -672,7 +718,8 @@ function renderGames() {
             const electric = (g.away.electric ? 1 : 0) + (g.home.electric ? 1 : 0);
             const hotBonus = g.hotHitterInfo.length;
             const milestoneBonus = g.milestoneInfo.length * 2;
-            return `Fun Score: ${g.funScore} (${g.away.nickname}: ${awayScore}, ${g.home.nickname}: ${homeScore}, Electric: +${electric}, Hot Hitters: +${hotBonus}, Milestones: +${milestoneBonus})`;
+            const featuredBonus = g.featuredEventBonus * 2;
+            return `Fun Score: ${g.funScore} (${g.away.nickname}: ${awayScore}, ${g.home.nickname}: ${homeScore}, Electric: +${electric}, Hot Hitters: +${hotBonus}, Milestones: +${milestoneBonus}, Featured: +${featuredBonus})`;
         })();
         const hotHitterTooltip = g.hotHitterInfo.map(h => `${h.name} (${h.stat})`).join(', ');
         const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');
