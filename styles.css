@@ -190,6 +190,20 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
     border: 1px solid rgba(234, 179, 8, 0.3);
 }
 
+.hot-hitter-badge {
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+    border: 1px solid rgba(249, 115, 22, 0.35);
+    cursor: help;
+}
+
+.milestone-badge {
+    background: rgba(234, 179, 8, 0.12);
+    color: #fbbf24;
+    border: 1px solid rgba(234, 179, 8, 0.45);
+    cursor: help;
+}
+
 @media (min-width: 769px) {
     .mobile-only {
         display: none !important;

@@ -55,6 +55,8 @@ let standingsData = null; // Store raw standings for record and rank
 let gamesData = { today: [], tomorrow: [], dayafter: [] };
 let activeTab = 'today';
 let filters = { bothUnseen: false, featured: false, electric: false, funGames: false };
+let hotHitters = new Map();     // team nickname -> [{name, stat}]
+let milestoneWatch = new Map(); // team nickname -> [{name, description}]
 
 // DOM Maps
 const dom = {
@@ -80,10 +82,13 @@ async function loadEverything() {
     try {
         await fetchSavedTeams();
         loadStaticTeams();
+        // Fetch standings + hot hitters/milestones in parallel first,
+        // THEN fetch schedule (processGame needs both maps ready)
         await Promise.all([
-            fetchStandings(), // Get current year standings
-            fetchSchedule()
+            fetchStandings(),
+            fetchHotHittersAndMilestones()
         ]);
+        await fetchSchedule();
     } catch (e) {
         console.error("Load error:", e);
     } finally {
@@ -285,6 +290,76 @@ function loadStaticTeams() {
     }
 }
 
+// 2.5 Hot Hitters & Milestone Watch
+async function fetchHotHittersAndMilestones() {
+    const year = new Date().getFullYear();
+
+    // --- HOT HITTERS: top 5 season HR and batting average leaders ---
+    try {
+        const url = `${STATS_API_BASE}/stats/leaders?leaderCategories=homeRuns,battingAverage&statGroup=hitting&limit=5&season=${year}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        (data.leagueLeaders || []).forEach(cat => {
+            (cat.leaders || []).forEach(leader => {
+                const nickname = findNicknameFromApiName(leader.team?.name);
+                if (!nickname) return;
+                if (!hotHitters.has(nickname)) hotHitters.set(nickname, []);
+                const rawVal = leader.value || '0';
+                const statLabel = cat.leaderCategory === 'homeRuns'
+                    ? `${rawVal} HR`
+                    : `${parseFloat(rawVal).toFixed(3).replace(/^0/, '')} AVG`;
+                // Avoid duplicate player entries across categories
+                const existing = hotHitters.get(nickname);
+                if (!existing.some(h => h.name === leader.person.fullName)) {
+                    existing.push({ name: leader.person.fullName, stat: statLabel });
+                }
+            });
+        });
+    } catch(e) {
+        console.warn('Hot hitters fetch failed:', e);
+    }
+
+    // --- MILESTONES: career leaders approaching round-number thresholds ---
+    const MILESTONE_DEFS = [
+        { category: 'homeRuns',   group: 'hitting',  targets: [500, 600, 700], window: 15, unit: 'career home runs' },
+        { category: 'hits',       group: 'hitting',  targets: [3000, 4000],    window: 20, unit: 'career hits' },
+        { category: 'strikeouts', group: 'pitching', targets: [3000],          window: 50, unit: 'career strikeouts' }
+    ];
+
+    await Promise.all(MILESTONE_DEFS.map(async ({ category, group, targets, window, unit }) => {
+        try {
+            // Fetch top 100 career leaders; active players near milestones will surface naturally
+            const url = `${STATS_API_BASE}/stats/leaders?leaderCategories=${category}&statGroup=${group}&statType=career&limit=100`;
+            const res = await fetch(url);
+            const data = await res.json();
+            ((data.leagueLeaders?.[0]?.leaders) || []).forEach(leader => {
+                const value = parseInt(leader.value, 10);
+                for (const target of targets) {
+                    const gap = target - value;
+                    if (gap > 0 && gap <= window) {
+                        const nickname = findNicknameFromApiName(leader.team?.name);
+                        if (!nickname) return;
+                        if (!milestoneWatch.has(nickname)) milestoneWatch.set(nickname, []);
+                        milestoneWatch.get(nickname).push({
+                            name: leader.person.fullName,
+                            description: `${leader.person.fullName} needs ${gap} more to reach ${target.toLocaleString()} ${unit}`
+                        });
+                        break; // only flag the nearest milestone
+                    }
+                }
+            });
+        } catch(e) {
+            console.warn(`Milestone fetch for ${category} failed:`, e);
+        }
+    }));
+}
+
+function findNicknameFromApiName(apiTeamName) {
+    if (!apiTeamName) return null;
+    const team = allTeamsDetailed.find(t => apiTeamName.includes(t.name) || t.name.includes(apiTeamName));
+    return team?.name || null;
+}
+
 // 2.5 Standings -> Rank and Record
 async function fetchStandings() {
     try {
@@ -395,6 +470,18 @@ function processGame(game) {
     if (isElectricAway) gameFunScore += 1;
     if (isElectricHome) gameFunScore += 1;
 
+    // Hot Hitters bonus (+1 per unique hot hitter in this game)
+    const awayHotHitters = (hotHitters.get(awayNickname) || []).map(h => ({...h, team: awayNickname}));
+    const homeHotHitters = (hotHitters.get(homeNickname) || []).map(h => ({...h, team: homeNickname}));
+    const allGameHotHitters = [...awayHotHitters, ...homeHotHitters];
+    gameFunScore += allGameHotHitters.length;
+
+    // Milestone Watch bonus (+2 per milestone player in this game)
+    const awayMilestones = (milestoneWatch.get(awayNickname) || []).map(m => ({...m, team: awayNickname}));
+    const homeMilestones = (milestoneWatch.get(homeNickname) || []).map(m => ({...m, team: homeNickname}));
+    const allGameMilestones = [...awayMilestones, ...homeMilestones];
+    gameFunScore += allGameMilestones.length * 2;
+
     return {
         id: game.gamePk,
         date: new Date(game.gameDate),
@@ -407,7 +494,9 @@ function processGame(game) {
         anyUnseen: awayUnseen || homeUnseen,
         anyElectric: isElectricAway || isElectricHome,
         allNetworks: allNetworks.length > 0 ? allNetworks.join(', ') : 'No TV Info',
-        featuredNetworks: featuredNetworks
+        featuredNetworks: featuredNetworks,
+        hotHitterInfo: allGameHotHitters,
+        milestoneInfo: allGameMilestones
     };
 }
 
@@ -567,10 +656,21 @@ function renderGames() {
     
     dom.gamesContainer.innerHTML = filtered.map(g => {
         const timeStr = escapeHTML(g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET');
+        const funTooltip = (() => {
+            const base = (TEAM_FUN_SCORES[g.away.nickname] || 0) + (TEAM_FUN_SCORES[g.home.nickname] || 0);
+            const electric = (g.away.electric ? 1 : 0) + (g.home.electric ? 1 : 0);
+            const hotBonus = g.hotHitterInfo.length;
+            const milestoneBonus = g.milestoneInfo.length * 2;
+            return `Fun Score: ${g.funScore} (Base: ${base}, Electric: +${electric}, Hot Hitters: +${hotBonus}, Milestones: +${milestoneBonus})`;
+        })();
+        const hotHitterTooltip = g.hotHitterInfo.map(h => `${h.name} (${h.stat})`).join(', ');
+        const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');
         const badgesHtml = [
-            `<div class="badge fun-badge" title="Fun Score: ${escapeHTML(g.funScore)} (Teams: ${escapeHTML(TEAM_FUN_SCORES[g.away.nickname])}+${escapeHTML(TEAM_FUN_SCORES[g.home.nickname])}, Electric Bonus: +${escapeHTML(g.funScore - (TEAM_FUN_SCORES[g.away.nickname] + TEAM_FUN_SCORES[g.home.nickname]))})"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${escapeHTML(g.funScore)}</div>`,
+            `<div class="badge fun-badge" title="${escapeHTML(funTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${escapeHTML(g.funScore)}</div>`,
             g.bothUnseen ? `<div class="badge both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : '',
             g.anyElectric ? `<div class="badge electric-badge mobile-only"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">bolt</span>ELECTRIC SP</div>` : '',
+            g.hotHitterInfo.length > 0 ? `<div class="badge hot-hitter-badge" title="${escapeHTML(hotHitterTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">local_fire_department</span>HOT BATS</div>` : '',
+            g.milestoneInfo.length > 0 ? `<div class="badge milestone-badge" title="${escapeHTML(milestoneTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">emoji_events</span>MILESTONE</div>` : '',
             ...g.featuredNetworks.map(n => `<div class="badge network-badge">${escapeHTML(n)}</div>`)
         ].join('');
         
