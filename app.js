@@ -321,9 +321,9 @@ async function fetchHotHittersAndMilestones() {
 
     // --- MILESTONES: career leaders approaching round-number thresholds ---
     const MILESTONE_DEFS = [
-        { category: 'homeRuns',   group: 'hitting',  targets: [500, 600, 700], window: 15, unit: 'career home runs' },
-        { category: 'hits',       group: 'hitting',  targets: [3000, 4000],    window: 20, unit: 'career hits' },
-        { category: 'strikeouts', group: 'pitching', targets: [3000],          window: 50, unit: 'career strikeouts' }
+        { category: 'homeRuns',   group: 'hitting',  targets: [500, 600, 700], window: 1,  unit: 'career home runs' },
+        { category: 'hits',       group: 'hitting',  targets: [3000, 4000],    window: 2,  unit: 'career hits' },
+        { category: 'strikeouts', group: 'pitching', targets: [3000],          window: 6,  unit: 'career strikeouts' }
     ];
 
     await Promise.all(MILESTONE_DEFS.map(async ({ category, group, targets, window, unit }) => {
