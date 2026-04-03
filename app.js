@@ -301,7 +301,12 @@ async function fetchStandings() {
             // Map stats back to allTeamsDetailed
             data.records.forEach(divRecord => {
                 divRecord.teamRecords.forEach(tr => {
-                    const team = allTeamsDetailed.find(t => t.name.includes(tr.team.name) || tr.team.name.includes(t.name));
+                    const apiName = tr.team.name;
+                    const team = allTeamsDetailed.find(t => 
+                        t.name.includes(apiName) || 
+                        apiName.includes(t.name) ||
+                        (t.name === "Diamondbacks" && apiName.toLowerCase().includes("d-back"))
+                    );
                     if (team) {
                         team.wins = tr.wins;
                         team.losses = tr.losses;
