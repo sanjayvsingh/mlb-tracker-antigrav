@@ -10,3 +10,8 @@ Thumbs.db
 # IDEs
 .vscode/
 .idea/
+
+# Scratch / debug files
+*.json
+*.txt
+sheet.csv
