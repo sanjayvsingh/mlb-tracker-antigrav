@@ -23,7 +23,7 @@ try {
             $cacheValid = $false
             if (Test-Path $cacheFile) {
                 $lastWrite = (Get-Item $cacheFile).LastWriteTime
-                if ((Get-Date) - $lastWrite -lt (New-TimeSpan -Hours 12)) {
+                if ((Get-Date) - $lastWrite -lt (New-TimeSpan -Hours 6)) {
                     $cacheValid = $true
                 }
             }

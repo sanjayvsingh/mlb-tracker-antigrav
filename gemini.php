@@ -33,8 +33,8 @@ $cacheValid = false;
 
 if (file_exists($cacheFile)) {
     $filemtime = filemtime($cacheFile);
-    // Check if the cache is less than 12 hours old (43200 seconds)
-    if (time() - $filemtime < 43200) {
+    // Check if the cache is less than 6 hours old (21600 seconds)
+    if (time() - $filemtime < 21600) {
         $cacheValid = true;
     }
 }
