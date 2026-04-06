@@ -15,3 +15,5 @@ Thumbs.db
 *.json
 *.txt
 sheet.csv
+
+api_key.php

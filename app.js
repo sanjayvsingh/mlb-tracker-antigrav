@@ -65,7 +65,7 @@ let allTeamsDetailed = []; // From standings
 let standingsData = null; // Store raw standings for record and rank
 let gamesData = { today: [], tomorrow: [], dayafter: [] };
 let activeTab = 'today';
-let filters = { bothUnseen: false, featured: false, electric: false, funGames: false };
+let filters = { bothUnseen: false, featured: false, electric: false, funGames: false, showcase: false };
 let hotHitters = new Map();     // team nickname -> [{name, stat}]
 let milestoneWatch = new Map(); // team nickname -> [{name, description}]
 
@@ -104,6 +104,9 @@ async function loadEverything() {
             fetchHotHittersAndMilestones()
         ]);
         await fetchSchedule();
+        if (gamesData.today && gamesData.today.length > 0) {
+            await applyGeminiRecommendations(gamesData.today);
+        }
     } catch (e) {
         console.error("Load error:", e);
     } finally {
@@ -153,6 +156,12 @@ function setupListeners() {
 
     document.getElementById('filter-electric').addEventListener('click', (e) => {
         filters.electric = !filters.electric;
+        e.currentTarget.classList.toggle('active');
+        renderGames();
+    });
+
+    document.getElementById('filter-showcase').addEventListener('click', (e) => {
+        filters.showcase = !filters.showcase;
         e.currentTarget.classList.toggle('active');
         renderGames();
     });
@@ -705,6 +714,7 @@ function renderGames() {
         if (filters.featured && g.featuredNetworks.length === 0) return false;
         if (filters.electric && !g.anyElectric) return false;
         if (filters.funGames && !g.isHighFun) return false;
+        if (filters.showcase && !g.isShowcase) return false;
         return true;
     });
     
@@ -728,6 +738,7 @@ function renderGames() {
             if (electric > 0) components.push(`+${electric} Electric starter`);
             if (hotBonus > 0) components.push(`+${hotBonus} Hot hitters`);
             if (milestoneBonus > 0) components.push(`+${milestoneBonus} Milestones`);
+            if (g.isShowcase) components.push(`+1 Showcase game`);
             
             return `Fun score: ${g.funScore}${components.length > 0 ? ` (${components.join(', ')})` : ''}`;
         })();
@@ -735,6 +746,7 @@ function renderGames() {
         const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');
         const badgesHtml = [
             `<div class="badge fun-badge" title="${escapeHTML(funTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${escapeHTML(g.funScore)}</div>`,
+            g.isShowcase ? `<div class="badge showcase-badge" title="${escapeHTML(g.showcaseReason)}"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">auto_awesome</span>SHOWCASE</div>` : '',
             g.bothUnseen ? `<div class="badge both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : '',
             g.anyElectric ? `<div class="badge electric-badge mobile-only"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">bolt</span>ELECTRIC SP</div>` : '',
             g.hotHitterInfo.length > 0 ? `<div class="badge hot-hitter-badge" title="${escapeHTML(hotHitterTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">local_fire_department</span>HOT BATS</div>` : '',
@@ -791,6 +803,58 @@ function isTeamMatch(name) {
 }
 function formatDateForTab(d, prefix) {
     return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '')}`;
+}
+
+async function applyGeminiRecommendations(gamesList) {
+    if (!gamesList || gamesList.length === 0) return;
+    
+    const payload = {
+        games: gamesList.map(g => ({
+            away: TEAM_ABBR[g.away.nickname || g.away.name] || g.away.nickname || g.away.name,
+            home: TEAM_ABBR[g.home.nickname || g.home.name] || g.home.nickname || g.home.name,
+            awaySp: g.away.sp,
+            homeSp: g.home.sp
+        }))
+    };
+
+    try {
+        const res = await fetch('gemini.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) {
+            console.warn("Gemini API call failed or not configured.");
+            return;
+        }
+        
+        const text = await res.text();
+        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const data = JSON.parse(cleanText);
+        
+        if (data && data.games) {
+            data.games.forEach(reco => {
+                const awayTeam = reco.a || reco.awayTeam;
+                const homeTeam = reco.h || reco.homeTeam;
+                const match = gamesData.today.find(g => {
+                    const aCode = TEAM_ABBR[g.away.nickname || g.away.name] || g.away.nickname || g.away.name;
+                    const hCode = TEAM_ABBR[g.home.nickname || g.home.name] || g.home.nickname || g.home.name;
+                    return (aCode === awayTeam || aCode === TEAM_ABBR[awayTeam]) && 
+                           (hCode === homeTeam || hCode === TEAM_ABBR[homeTeam]);
+                });
+                
+                if (match) {
+                    match.funScore += 1;
+                    match.isHighFun = match.funScore >= 8;
+                    match.isShowcase = true;
+                    match.showcaseReason = reco.r || reco.reason;
+                }
+            });
+        }
+    } catch (e) {
+        console.warn("Skipping Gemini recommendations locally:", e);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', init);
