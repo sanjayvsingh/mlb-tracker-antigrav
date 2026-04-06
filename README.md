@@ -15,6 +15,7 @@ While built for personal use, it's also a great way for any fan to see what inte
 - **Real-time Game Tracking**: Fetches live data from the MLB Stats API.
 - **Unseen Team Highlights**: Automatically identifies matchups with teams you haven't watched yet.
 - **Priority Filtering**: Filter for "Top Priority" games where both teams are unseen.
+- **Gemini AI Recommendations**: Uses AI to automatically identify and showcase 3 compelling games every day.
 - **Metrics Shelf**: Visual representation of your season progress.
 - **Material Icons**: Clean, consistent UI using Material Design iconography.
 - **Mobile Responsive**: Designed to look great on any device.
@@ -27,6 +28,9 @@ The application integrates data from multiple real-time sources to calculate the
   - `standings`: Fetches division ranks and win/loss records.
   - `stats/leaders`: Identifies "Hot Hitters" (league leaders in HR, SLG, OPS) and players near career milestones.
   - `schedule`: Retrieves the 3-day game window, hydrated with `probablePitcher` and `broadcasts`.
+
+- **Google Gemini API**:
+  - `gemini-2.5-flash`: Securely proxied through a PHP backend (`gemini.php`) to fetch short, dynamic reasons to watch targeted MLB games and caches them locally for 6 hours to conserve API limits.
 
 ## 🔗 URL Parameters
 
@@ -41,7 +45,8 @@ You can customize the application state using the following parameters:
 ## 🛠️ Tech Stack
 
 - **Frontend**: Vanilla HTML5, JavaScript (ES6+), CSS3.
-- **Data Source**: MLB Stats API.
+- **Backend Proxy**: PHP (for secure AI API requests) and PowerShell (`server.ps1` for local development).
+- **Data Source**: MLB Stats API, Google Gemini API.
 - **Icons**: [Material Icons](https://fonts.google.com/icons)
 
 ## 🎯 Goal

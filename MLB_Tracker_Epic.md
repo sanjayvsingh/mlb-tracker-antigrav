@@ -109,6 +109,16 @@ A working prototype exists using vanilla HTML, CSS, and JS. The goal for the off
   - **Electric Pitcher Label:** Add a lightning bolt next to the pitcher's name if they are on the "Electric Starters" list.
   - **Network Badges:** Display networks broadcasting the game, highlighting featured ones (e.g., Apple, Netflix, Peacock).
 
+**STORY 4.3: AI Showcase Integration**
+- **As a** user
+- **I want** an AI (Gemini) to recommend 3 compelling games daily
+- **So that** I discover interesting storylines directly on my tracker without external research.
+- **Acceptance Criteria:**
+  - Securely query a backend PHP proxy which caches responses for 6 hours.
+  - Parse the AI's JSON object and apply a `SHOWCASE` badge to the matched games.
+  - Add a +1 bump to the matched games' Fun Score.
+  - Reveal the AI's 1-sentence reasoning as a tooltip when hovering over the Showcase badge.
+
 ---
 
 ### Epic 5: Filtering Schedule
@@ -122,6 +132,7 @@ A working prototype exists using vanilla HTML, CSS, and JS. The goal for the off
   - **Both Unseen:** Shows only games where both teams are on my unseen list.
   - **Electric Starters:** Shows only games featuring at least one "electric" probable pitcher.
   - **Featured Broadcasts:** Shows only games airing on national/featured networks.
+  - **Showcase:** Shows only the 3 daily AI-recommended games.
   - Show a "No games match" state if the resulting list is empty.
 
 ## Technical & Non-Functional Requirements
