@@ -28,7 +28,10 @@ if (!$input || !isset($input['games'])) {
 }
 
 // Caching logic
-$cacheFile = 'gemini_cache.json';
+$debugDate = isset($input['debugDate']) ? $input['debugDate'] : null;
+// Clean debugDate to prevent path traversal
+$safeDebugDate = $debugDate ? preg_replace('/[^0-9-]/', '', $debugDate) : '';
+$cacheFile = $safeDebugDate ? 'gemini_cache_' . $safeDebugDate . '.json' : 'gemini_cache.json';
 $cacheValid = false;
 
 if (file_exists($cacheFile)) {
@@ -48,10 +51,11 @@ if ($cacheValid) {
 // If no valid cache, construct prompt and call Gemini API
 $gamesList = "";
 foreach ($input['games'] as $g) {
-    $gamesList .= "- " . $g['away'] . " @ " . $g['home'] . " (Pitchers: " . $g['awaySp'] . " vs " . $g['homeSp'] . ")\n";
+    $gamesList .= "- " . (isset($g['date']) ? "[" . $g['date'] . "] " : "") . $g['away'] . " @ " . $g['home'] . " (Pitchers: " . $g['awaySp'] . " vs " . $g['homeSp'] . ")\n";
 }
 
-$prompt = "Recommend 3 compelling MLB games today. Return ONLY JSON: {\"games\":[{\"a\":\"AWAY_TEAM_CODE\",\"h\":\"HOME_TEAM_CODE\",\"r\":\"1 sentence reason\"}]}. Games: " . $gamesList;
+$startDateLabel = $debugDate ? $debugDate : "today";
+$prompt = "From the following list of MLB games over the next three days (starting " . $startDateLabel . "), recommend the five most compelling ones with the most interesting storylines. You MUST ONLY choose from the games provided in the list below, and you MUST include the exact date. Return ONLY JSON: {\"games\":[{\"date\":\"YYYY-MM-DD\",\"a\":\"AWAY_TEAM_CODE\",\"h\":\"HOME_TEAM_CODE\",\"r\":\"1 sentence reason\"}]}. Games list:\n" . $gamesList;
 
 $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $gemini_api_key;
 
@@ -75,8 +79,21 @@ curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For local/shared host compatibility
 
-$response = curl_exec($ch);
-$httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$maxRetries = 3;
+$response = false;
+$httpcode = 500;
+
+for ($i = 0; $i < $maxRetries; $i++) {
+    $response = curl_exec($ch);
+    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    
+    if ($httpcode == 200) {
+        break;
+    }
+    // Wait 2 seconds before retrying if rate limited or server error
+    sleep(2);
+}
+
 curl_close($ch);
 
 if ($httpcode == 200) {

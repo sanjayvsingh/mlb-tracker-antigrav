@@ -19,8 +19,28 @@ try {
         
         if ($localPath -eq 'gemini.php' -and $context.Request.HttpMethod -eq 'POST') {
             $response.ContentType = "application/json"
-            $cacheFile = Join-Path $PSScriptRoot "gemini_cache.json"
             $cacheValid = $false
+            
+            $reader = New-Object System.IO.StreamReader($context.Request.InputStream)
+            $inputJson = $reader.ReadToEnd()
+            $inputObj = $inputJson | ConvertFrom-Json
+            
+            $debugDate = $null
+            if ($inputObj.debugDate) {
+                $debugDate = $inputObj.debugDate
+            }
+
+            $safeDebugDate = ""
+            if ($debugDate) {
+                $safeDebugDate = $debugDate -replace '[^0-9-]', ''
+            }
+            
+            $cacheFileName = "gemini_cache.json"
+            if ($safeDebugDate) {
+                $cacheFileName = "gemini_cache_$safeDebugDate.json"
+            }
+            $cacheFile = Join-Path $PSScriptRoot $cacheFileName
+            
             if (Test-Path $cacheFile) {
                 $lastWrite = (Get-Item $cacheFile).LastWriteTime
                 if ((Get-Date) - $lastWrite -lt (New-TimeSpan -Hours 6)) {
@@ -45,18 +65,24 @@ try {
                     if ($keyContent -match 'return\s+["'']([^"'']+)["'']') {
                         $geminiApiKey = $matches[1]
                     }
-                    $reader = New-Object System.IO.StreamReader($context.Request.InputStream)
-                    $inputJson = $reader.ReadToEnd()
-                    $inputObj = $inputJson | ConvertFrom-Json
                     
                     $gamesList = ""
                     if ($inputObj.games) {
                         foreach ($g in $inputObj.games) {
-                            $gamesList += "- $($g.away) @ $($g.home) (Pitchers: $($g.awaySp) vs $($g.homeSp))`n"
+                            $dateStr = ""
+                            if ($g.date) {
+                                $dateStr = "[" + $g.date + "] "
+                            }
+                            $gamesList += "- {0}{1} @ {2} (Pitchers: {3} vs {4})`n" -f $dateStr, $g.away, $g.home, $g.awaySp, $g.homeSp
                         }
                     }
                     
-                    $prompt = "Recommend 3 compelling MLB games today. Return ONLY JSON: {`"games`":[{`"a`":`"AWAY_TEAM_CODE`",`"h`":`"HOME_TEAM_CODE`",`"r`":`"1 sentence reason`"}]}. Games: $gamesList"
+                    $startDateLabel = "today"
+                    if ($debugDate) {
+                        $startDateLabel = $debugDate
+                    }
+                    
+                    $prompt = "From the following list of MLB games over the next three days (starting $startDateLabel), recommend the five most compelling ones with the most interesting storylines. You MUST ONLY choose from the games provided in the list below, and you MUST include the exact date. Return ONLY JSON: {`"games`":[{`"date`":`"YYYY-MM-DD`",`"a`":`"AWAY_TEAM_CODE`",`"h`":`"HOME_TEAM_CODE`",`"r`":`"1 sentence reason`"}]}. Games list:`n$gamesList"
                     
                     $uri = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey"
                     $body = @{
@@ -67,7 +93,19 @@ try {
                     } | ConvertTo-Json -Depth 5
                     
                     try {
-                        $geminiResp = Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/json"
+                        $maxRetries = 3
+                        $geminiResp = $null
+                        
+                        for ($i = 0; $i -lt $maxRetries; $i++) {
+                            try {
+                                $geminiResp = Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/json"
+                                break
+                            } catch {
+                                if ($i -eq $maxRetries - 1) { throw }
+                                Start-Sleep -Seconds 2
+                            }
+                        }
+                        
                         $geminiText = $geminiResp.candidates[0].content.parts[0].text
                         $responseBytes = [System.Text.Encoding]::UTF8.GetBytes($geminiText)
                         

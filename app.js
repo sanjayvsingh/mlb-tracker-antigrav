@@ -104,8 +104,9 @@ async function loadEverything() {
             fetchHotHittersAndMilestones()
         ]);
         await fetchSchedule();
-        if (gamesData.today && gamesData.today.length > 0) {
-            await applyGeminiRecommendations(gamesData.today);
+        const allGames = [...(gamesData.today || []), ...(gamesData.tomorrow || []), ...(gamesData.dayafter || [])];
+        if (allGames.length > 0) {
+            applyGeminiRecommendations(allGames); // Parallel, no await
         }
     } catch (e) {
         console.error("Load error:", e);
@@ -808,8 +809,13 @@ function formatDateForTab(d, prefix) {
 async function applyGeminiRecommendations(gamesList) {
     if (!gamesList || gamesList.length === 0) return;
     
+    const params = new URLSearchParams(window.location.search);
+    const debugDate = params.get('debugDate');
+
     const payload = {
+        debugDate: debugDate,
         games: gamesList.map(g => ({
+            date: getLocalDateString(g.date),
             away: TEAM_ABBR[g.away.nickname || g.away.name] || g.away.nickname || g.away.name,
             home: TEAM_ABBR[g.home.nickname || g.home.name] || g.home.nickname || g.home.name,
             awaySp: g.away.sp,
@@ -834,23 +840,42 @@ async function applyGeminiRecommendations(gamesList) {
         const data = JSON.parse(cleanText);
         
         if (data && data.games) {
+            const allStorage = [gamesData.today, gamesData.tomorrow, gamesData.dayafter];
             data.games.forEach(reco => {
                 const awayTeam = reco.a || reco.awayTeam;
                 const homeTeam = reco.h || reco.homeTeam;
-                const match = gamesData.today.find(g => {
-                    const aCode = TEAM_ABBR[g.away.nickname || g.away.name] || g.away.nickname || g.away.name;
-                    const hCode = TEAM_ABBR[g.home.nickname || g.home.name] || g.home.nickname || g.home.name;
-                    return (aCode === awayTeam || aCode === TEAM_ABBR[awayTeam]) && 
-                           (hCode === homeTeam || hCode === TEAM_ABBR[homeTeam]);
+                const recoDate = reco.date || reco.d;
+                const reason = reco.r || reco.reason;
+
+                console.log(`Gemini reco: ${awayTeam} @ ${homeTeam} on ${recoDate} - ${reason}`);
+
+                allStorage.forEach(dayList => {
+                    if (!dayList) return;
+                    const match = dayList.find(g => {
+                        const aCode = TEAM_ABBR[g.away.nickname || g.away.name] || g.away.nickname || g.away.name;
+                        const hCode = TEAM_ABBR[g.home.nickname || g.home.name] || g.home.nickname || g.home.name;
+                        const isMatch = (aCode === awayTeam || aCode === TEAM_ABBR[awayTeam]) && 
+                                        (hCode === homeTeam || hCode === TEAM_ABBR[homeTeam]);
+                                        
+                        if (!isMatch) return false;
+                        
+                        if (recoDate) {
+                            return getLocalDateString(g.date) === recoDate;
+                        }
+                        return true;
+                    });
+                    
+                    if (match) {
+                        console.log(`Matched! Added to game ${match.id}`);
+                        match.funScore += 1;
+                        match.isHighFun = match.funScore >= 8;
+                        match.isShowcase = true;
+                        match.showcaseReason = reason;
+                    }
                 });
-                
-                if (match) {
-                    match.funScore += 1;
-                    match.isHighFun = match.funScore >= 8;
-                    match.isShowcase = true;
-                    match.showcaseReason = reco.r || reco.reason;
-                }
             });
+            // Re-render once matches are applied
+            renderGames();
         }
     } catch (e) {
         console.warn("Skipping Gemini recommendations locally:", e);
