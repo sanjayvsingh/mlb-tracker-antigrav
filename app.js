@@ -812,8 +812,30 @@ async function applyGeminiRecommendations(gamesList) {
     const params = new URLSearchParams(window.location.search);
     const debugDate = params.get('debugDate');
 
+    // Build team context: standings, hot hitters, milestones
+    const teamContext = {};
+    allTeamsDetailed.forEach(t => {
+        const abbr = TEAM_ABBR[t.name];
+        if (!abbr) return;
+        const ctx = {
+            record: `${t.wins}-${t.losses}`,
+            div: t.division,
+            rank: t.rank !== 99 ? t.rank : null
+        };
+        const hh = hotHitters.get(t.name);
+        if (hh && hh.length > 0) {
+            ctx.hot = hh.map(h => `${h.name} (${h.stat})`);
+        }
+        const ms = milestoneWatch.get(t.name);
+        if (ms && ms.length > 0) {
+            ctx.milestones = ms.map(m => m.description);
+        }
+        teamContext[abbr] = ctx;
+    });
+
     const payload = {
         debugDate: debugDate,
+        teamContext: teamContext,
         games: gamesList.map(g => ({
             date: getLocalDateString(g.date),
             away: TEAM_ABBR[g.away.nickname || g.away.name] || g.away.nickname || g.away.name,

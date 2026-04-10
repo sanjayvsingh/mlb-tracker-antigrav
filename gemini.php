@@ -1,6 +1,13 @@
 <?php
 // gemini.php - Gemini API proxy and caching script
 
+function ordinal($n) {
+    $n = intval($n);
+    $s = ['th', 'st', 'nd', 'rd'];
+    $v = $n % 100;
+    return $n . ($s[($v - 20) % 10] ?? $s[$v] ?? $s[0]);
+}
+
 if (file_exists('api_key.php')) {
     $gemini_api_key = require 'api_key.php';
 } else {
@@ -49,13 +56,72 @@ if ($cacheValid) {
 }
 
 // If no valid cache, construct prompt and call Gemini API
+$teamContext = isset($input['teamContext']) ? $input['teamContext'] : [];
+
 $gamesList = "";
 foreach ($input['games'] as $g) {
-    $gamesList .= "- " . (isset($g['date']) ? "[" . $g['date'] . "] " : "") . $g['away'] . " @ " . $g['home'] . " (Pitchers: " . $g['awaySp'] . " vs " . $g['homeSp'] . ")\n";
+    $date = isset($g['date']) ? $g['date'] : '';
+    $away = $g['away'];
+    $home = $g['home'];
+    
+    // Build enriched away team info
+    $awayInfo = $away;
+    if (isset($teamContext[$away])) {
+        $tc = $teamContext[$away];
+        $awayInfo .= " (" . $tc['record'];
+        if (isset($tc['rank'])) $awayInfo .= ", " . ordinal($tc['rank']) . " " . $tc['div'];
+        $awayInfo .= ")";
+    }
+    
+    // Build enriched home team info
+    $homeInfo = $home;
+    if (isset($teamContext[$home])) {
+        $tc = $teamContext[$home];
+        $homeInfo .= " (" . $tc['record'];
+        if (isset($tc['rank'])) $homeInfo .= ", " . ordinal($tc['rank']) . " " . $tc['div'];
+        $homeInfo .= ")";
+    }
+    
+    $line = "- [$date] $awayInfo @ $homeInfo | Pitchers: " . $g['awaySp'] . " vs " . $g['homeSp'];
+    
+    // Append hot hitters
+    $hotParts = [];
+    if (isset($teamContext[$away]['hot'])) {
+        foreach ($teamContext[$away]['hot'] as $h) $hotParts[] = $h;
+    }
+    if (isset($teamContext[$home]['hot'])) {
+        foreach ($teamContext[$home]['hot'] as $h) $hotParts[] = $h;
+    }
+    if (!empty($hotParts)) {
+        $line .= " | Hot: " . implode(", ", $hotParts);
+    }
+    
+    // Append milestones
+    $mileParts = [];
+    if (isset($teamContext[$away]['milestones'])) {
+        foreach ($teamContext[$away]['milestones'] as $m) $mileParts[] = $m;
+    }
+    if (isset($teamContext[$home]['milestones'])) {
+        foreach ($teamContext[$home]['milestones'] as $m) $mileParts[] = $m;
+    }
+    if (!empty($mileParts)) {
+        $line .= " | Milestone: " . implode("; ", $mileParts);
+    }
+    
+    $gamesList .= $line . "\n";
 }
 
 $startDateLabel = $debugDate ? $debugDate : "today";
-$prompt = "From the following list of MLB games over the next three days (starting " . $startDateLabel . "), recommend the five most compelling ones with the most interesting storylines. You MUST ONLY choose from the games provided in the list below, and you MUST include the exact date. Return ONLY JSON: {\"games\":[{\"date\":\"YYYY-MM-DD\",\"a\":\"AWAY_TEAM_CODE\",\"h\":\"HOME_TEAM_CODE\",\"r\":\"1 sentence reason\"}]}. Games list:\n" . $gamesList;
+$prompt = "You are an MLB analyst. Below is a list of all MLB games over the next three days (starting " . $startDateLabel . "), with each team's current record, division standing, probable pitchers, hot hitters, and milestone watches.\n\n"
+    . "Evaluate ALL of the games below and select the five most compelling to watch. Prioritize:\n"
+    . "- Meaningful rivalry or divisional matchups with playoff implications\n"
+    . "- Exceptional or historic pitching duels\n"
+    . "- Players chasing milestones or on hot streaks\n"
+    . "- Comeback stories, prospect debuts, or unusual storylines\n\n"
+    . "You MUST ONLY choose from the games listed below. You MUST include the exact date for each pick.\n"
+    . "Return ONLY valid JSON in this format: {\"games\":[{\"date\":\"YYYY-MM-DD\",\"a\":\"AWAY_TEAM_CODE\",\"h\":\"HOME_TEAM_CODE\",\"r\":\"1 sentence reason\"}]}\n\n"
+    . "Games:\n" . $gamesList;
+
 
 $url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $gemini_api_key;
 

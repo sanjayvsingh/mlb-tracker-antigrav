@@ -66,14 +66,73 @@ try {
                         $geminiApiKey = $matches[1]
                     }
                     
+                    $teamCtx = @{}
+                    if ($inputObj.teamContext) {
+                        $inputObj.teamContext.PSObject.Properties | ForEach-Object {
+                            $teamCtx[$_.Name] = $_.Value
+                        }
+                    }
+                    
+                    function Get-Ordinal($n) {
+                        $s = @('th','st','nd','rd')
+                        $v = [int]$n % 100
+                        $suffix = $s[($v - 20) % 10]
+                        if (-not $suffix) { $suffix = $s[$v] }
+                        if (-not $suffix) { $suffix = $s[0] }
+                        return "$n$suffix"
+                    }
+                    
                     $gamesList = ""
                     if ($inputObj.games) {
                         foreach ($g in $inputObj.games) {
                             $dateStr = ""
-                            if ($g.date) {
-                                $dateStr = "[" + $g.date + "] "
+                            if ($g.date) { $dateStr = $g.date }
+                            
+                            # Enrich away team info
+                            $awayInfo = $g.away
+                            if ($teamCtx.ContainsKey($g.away)) {
+                                $tc = $teamCtx[$g.away]
+                                $awayInfo += " ($($tc.record)"
+                                if ($tc.rank) { $awayInfo += ", $(Get-Ordinal $tc.rank) $($tc.div)" }
+                                $awayInfo += ")"
                             }
-                            $gamesList += "- {0}{1} @ {2} (Pitchers: {3} vs {4})`n" -f $dateStr, $g.away, $g.home, $g.awaySp, $g.homeSp
+                            
+                            # Enrich home team info
+                            $homeInfo = $g.home
+                            if ($teamCtx.ContainsKey($g.home)) {
+                                $tc = $teamCtx[$g.home]
+                                $homeInfo += " ($($tc.record)"
+                                if ($tc.rank) { $homeInfo += ", $(Get-Ordinal $tc.rank) $($tc.div)" }
+                                $homeInfo += ")"
+                            }
+                            
+                            $line = "- [$dateStr] $awayInfo @ $homeInfo | Pitchers: $($g.awaySp) vs $($g.homeSp)"
+                            
+                            # Hot hitters
+                            $hotParts = @()
+                            if ($teamCtx.ContainsKey($g.away) -and $teamCtx[$g.away].hot) {
+                                $hotParts += $teamCtx[$g.away].hot
+                            }
+                            if ($teamCtx.ContainsKey($g.home) -and $teamCtx[$g.home].hot) {
+                                $hotParts += $teamCtx[$g.home].hot
+                            }
+                            if ($hotParts.Count -gt 0) {
+                                $line += " | Hot: $($hotParts -join ', ')"
+                            }
+                            
+                            # Milestones
+                            $mileParts = @()
+                            if ($teamCtx.ContainsKey($g.away) -and $teamCtx[$g.away].milestones) {
+                                $mileParts += $teamCtx[$g.away].milestones
+                            }
+                            if ($teamCtx.ContainsKey($g.home) -and $teamCtx[$g.home].milestones) {
+                                $mileParts += $teamCtx[$g.home].milestones
+                            }
+                            if ($mileParts.Count -gt 0) {
+                                $line += " | Milestone: $($mileParts -join '; ')"
+                            }
+                            
+                            $gamesList += "$line`n"
                         }
                     }
                     
@@ -82,7 +141,7 @@ try {
                         $startDateLabel = $debugDate
                     }
                     
-                    $prompt = "From the following list of MLB games over the next three days (starting $startDateLabel), recommend the five most compelling ones with the most interesting storylines. You MUST ONLY choose from the games provided in the list below, and you MUST include the exact date. Return ONLY JSON: {`"games`":[{`"date`":`"YYYY-MM-DD`",`"a`":`"AWAY_TEAM_CODE`",`"h`":`"HOME_TEAM_CODE`",`"r`":`"1 sentence reason`"}]}. Games list:`n$gamesList"
+                    $prompt = "You are an MLB analyst. Below is a list of all MLB games over the next three days (starting $startDateLabel), with each team's current record, division standing, probable pitchers, hot hitters, and milestone watches.`n`nEvaluate ALL of the games below and select the five most compelling to watch. Prioritize:`n- Meaningful rivalry or divisional matchups with playoff implications`n- Exceptional or historic pitching duels`n- Players chasing milestones or on hot streaks`n- Comeback stories, prospect debuts, or unusual storylines`n`nYou MUST ONLY choose from the games listed below. You MUST include the exact date for each pick.`nReturn ONLY valid JSON in this format: {`"games`":[{`"date`":`"YYYY-MM-DD`",`"a`":`"AWAY_TEAM_CODE`",`"h`":`"HOME_TEAM_CODE`",`"r`":`"1 sentence reason`"}]}`n`nGames:`n$gamesList"
                     
                     $uri = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$geminiApiKey"
                     $body = @{
