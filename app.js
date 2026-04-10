@@ -91,31 +91,36 @@ async function init() {
 
 async function loadEverything() {
     try {
-        await fetchSavedTeams();
         loadStaticTeams();
-        // Fetch standings + hot hitters/milestones + odds in parallel first,
-        // THEN fetch schedule (processGame needs all maps ready)
-        const today = getToday();
-        const d0Str = getLocalDateString(today);
-        const d1 = new Date(today); d1.setDate(today.getDate() + 1);
-        const d2 = new Date(today); d2.setDate(today.getDate() + 2);
-        await Promise.all([
-            fetchStandings(),
-            fetchHotHittersAndMilestones()
-        ]);
+
+        // Fire ALL network requests in parallel immediately
+        const savedTeamsP = fetchSavedTeams();
+        const standingsP = fetchStandings();
+        const hotHittersP = fetchHotHittersAndMilestones();
+
+        // Phase 1: Render games as soon as the schedule arrives
+        // processGame works with defaults — unseen/fun scores may be approximate
         await fetchSchedule();
-        const allGames = [...(gamesData.today || []), ...(gamesData.tomorrow || []), ...(gamesData.dayafter || [])];
-        if (allGames.length > 0) {
-            applyGeminiRecommendations(allGames); // Parallel, no await
-        }
-    } catch (e) {
-        console.error("Load error:", e);
-    } finally {
         renderSidebar();
         renderMetrics();
         renderTabs();
         renderGames();
 
+        // Phase 2: Wait for enrichment data, then re-process for accurate scores
+        await Promise.all([savedTeamsP, standingsP, hotHittersP]);
+        reprocessAllGames();
+        renderSidebar();
+        renderMetrics();
+        renderGames();
+
+        // Phase 3: Fire Gemini in background (needs all enrichment data for prompt)
+        const allGames = [...(gamesData.today || []), ...(gamesData.tomorrow || []), ...(gamesData.dayafter || [])];
+        if (allGames.length > 0) {
+            applyGeminiRecommendations(allGames); // No await — runs in background
+        }
+    } catch (e) {
+        console.error("Load error:", e);
+    } finally {
         // Footer tooltip
         const pauly = document.getElementById('pauly-sheep');
         if (pauly) {
@@ -125,6 +130,48 @@ async function loadEverything() {
         }
     }
 }
+
+// Re-evaluate unseen status, fun scores, hot hitters, and milestones for all processed games
+function reprocessAllGames() {
+    [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter].forEach(g => {
+        // Update unseen status
+        g.away.unseen = g.away.official && isTeamMatch(g.away.name);
+        g.home.unseen = g.home.official && isTeamMatch(g.home.name);
+        g.bothUnseen = g.away.unseen && g.home.unseen;
+        g.anyUnseen = g.away.unseen || g.home.unseen;
+
+        // Recalculate fun score from scratch
+        const awayFun = TEAM_FUN_SCORES[g.away.nickname] || 0;
+        const homeFun = TEAM_FUN_SCORES[g.home.nickname] || 0;
+        let score = awayFun + homeFun;
+        if (g.away.electric) score += 1;
+        if (g.home.electric) score += 1;
+
+        // Hot hitters
+        const awayHH = (hotHitters.get(g.away.nickname) || []).map(h => ({...h, team: g.away.nickname}));
+        const homeHH = (hotHitters.get(g.home.nickname) || []).map(h => ({...h, team: g.home.nickname}));
+        g.hotHitterInfo = [...awayHH, ...homeHH];
+        score += g.hotHitterInfo.length;
+
+        // Milestones
+        const awayMS = (milestoneWatch.get(g.away.nickname) || []).map(m => ({...m, team: g.away.nickname}));
+        const homeMS = (milestoneWatch.get(g.home.nickname) || []).map(m => ({...m, team: g.home.nickname}));
+        g.milestoneInfo = [...awayMS, ...homeMS];
+        score += g.milestoneInfo.length * 2;
+
+        // Showcase bonus (preserve if already applied)
+        if (g.isShowcase) score += 1;
+
+        g.funScore = score;
+        g.isHighFun = score >= 8;
+    });
+
+    // Update allTeamsDetailed unseen status to match
+    allTeamsDetailed.forEach(t => {
+        t.unseen = isTeamMatch(t.name);
+    });
+}
+
 
 function setupListeners() {
     document.getElementById('filter-fun').addEventListener('click', (e) => {
