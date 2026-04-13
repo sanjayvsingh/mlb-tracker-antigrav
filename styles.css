@@ -38,7 +38,9 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 /* METRICS SHELF */
 .metrics-shelf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
 .metric-card { background: var(--bg-panel); border: 1px solid var(--border-main); border-radius: var(--card-radius); padding: 1rem; display: flex; align-items: center; gap: 16px; }
-.metric-icon-circle { width: 48px; height: 48px; border-radius: 50%; border: 3px solid var(--border-main); display: flex; justify-content: center; align-items: center; font-weight: 700; color: var(--text-muted); }
+.metric-icon-circle { width: 48px; height: 48px; border-radius: 50%; background: conic-gradient(var(--accent-green) calc(var(--progress, 0) * 1%), var(--border-main) 0); display: flex; justify-content: center; align-items: center; font-weight: 700; color: var(--text-muted); position: relative; }
+.metric-icon-circle::before { content: ''; position: absolute; inset: 3px; background: var(--bg-panel); border-radius: 50%; z-index: 1; }
+#metric-percent { position: relative; z-index: 2; }
 .metric-info { display: flex; flex-direction: column; gap: 4px; }
 .metric-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; }
 .metric-value { font-size: 1.35rem; font-weight: 700; color: #fff; }

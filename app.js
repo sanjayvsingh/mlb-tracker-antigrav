@@ -648,10 +648,12 @@ function renderSidebar() {
     
     // Metric Shelf Goal
     const seenCount = 30 - unseenCount;
+    const percent = Math.round((seenCount/30)*100);
     dom.metricSeen.textContent = seenCount;
     dom.metricRemaining.textContent = `${unseenCount} teams remaining`;
-    dom.metricPercent.textContent = `${Math.round((seenCount/30)*100)}%`;
-    if (seenCount === 30) dom.metricPercent.style.borderColor = "var(--accent-green)";
+    dom.metricPercent.textContent = `${percent}%`;
+    dom.metricPercent.parentElement.style.setProperty('--progress', percent);
+    if (seenCount === 30) dom.metricPercent.parentElement.style.borderColor = "var(--accent-green)";
 
     // Divisions HTML
     let html = '';
