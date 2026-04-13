@@ -1,0 +1,53 @@
+﻿You are an MLB analyst. Below is a list of all MLB games over the next three days (starting today), with each team's current record, division standing, probable pitchers, hot hitters, and milestone watches.
+
+Evaluate ALL of the games below and select the five most compelling to watch. Prioritize:
+- Meaningful rivalry or divisional matchups with playoff implications
+- Exceptional or historic pitching duels
+- Players chasing milestones or on hot streaks
+- Comeback stories, prospect debuts, or unusual storylines
+
+You MUST ONLY choose from the games listed below. You MUST include the exact date for each pick.
+Return ONLY valid JSON in this format: {"games":[{"date":"YYYY-MM-DD","a":"AWAY_TEAM_CODE","h":"HOME_TEAM_CODE","r":"1 sentence reason"}]}
+
+Games:
+- [2026-04-12] SFG (6-10, 4th NL West) @ BAL (8-7, 3rd AL East) | Pitchers: Adrian Houser vs Cade Povich | Hot: Gunnar Henderson (6 HR)
+- [2026-04-12] ARI (9-7, 3rd NL West) @ PHI (7-8, 3rd NL East) | Pitchers: Zac Gallen vs Zach Pop
+- [2026-04-12] MIN (9-7, 1st AL Central) @ TOR (6-9, 4th AL East) | Pitchers: Taj Bradley vs Max Scherzer
+- [2026-04-12] LAA (8-8, 3rd AL West) @ CIN (9-7, 2nd NL Central) | Pitchers: José Soriano vs Andrew Abbott
+- [2026-04-12] OAK (8-7, 2nd AL West) @ NYM (7-9, 5th NL East) | Pitchers: Aaron Civale vs Freddy Peralta
+- [2026-04-12] MIA (8-8, 2nd NL East) @ DET (7-9, 4th AL Central) | Pitchers: Sandy Alcantara vs Tarik Skubal
+- [2026-04-12] NYY (8-7, 2nd AL East) @ TBR (8-7, 1st AL East) | Pitchers: Cam Schlittler vs Drew Rasmussen | Hot: Ben Rice (.756 SLG)
+- [2026-04-12] CHW (6-10, 5th AL Central) @ KCR (7-9, 3rd AL Central) | Pitchers: Grant Taylor vs Noah Cameron
+- [2026-04-12] WSN (7-8, 4th NL East) @ MIL (8-7, 4th NL Central) | Pitchers: Zack Littell vs Brandon Woodruff
+- [2026-04-12] BOS (6-9, 5th AL East) @ STL (8-7, 3rd NL Central) | Pitchers: Brayan Bello vs Andre Pallante | Hot: Jordan Walker (7 HR)
+- [2026-04-12] PIT (9-6, 1st NL Central) @ CHC (7-8, 5th NL Central) | Pitchers: Bubba Chandler vs Jameson Taillon
+- [2026-04-12] COL (6-10, 5th NL West) @ SDP (10-6, 2nd NL West) | Pitchers: Kyle Freeland vs Nick Pivetta
+- [2026-04-12] HOU (6-10, 5th AL West) @ SEA (7-9, 4th AL West) | Pitchers: Cody Bolton vs Logan Gilbert | Hot: Yordan Alvarez (6 HR)
+- [2026-04-12] TEX (8-7, 1st AL West) @ LAD (11-4, 1st NL West) | Pitchers: Jacob deGrom vs Roki Sasaki | Hot: Andy Pages (1.181 OPS)
+- [2026-04-12] CLE (9-7, 2nd AL Central) @ ATL (10-6, 1st NL East) | Pitchers: Tanner Bibee vs Chris Sale
+- [2026-04-13] HOU (6-10, 5th AL West) @ SEA (7-9, 4th AL West) | Pitchers: Mike Burrows vs George Kirby | Hot: Yordan Alvarez (6 HR)
+- [2026-04-13] ARI (9-7, 3rd NL West) @ BAL (8-7, 3rd AL East) | Pitchers: Ryne Nelson vs TBD | Hot: Gunnar Henderson (6 HR)
+- [2026-04-13] WSN (7-8, 4th NL East) @ PIT (9-6, 1st NL Central) | Pitchers: Cade Cavalli vs Paul Skenes
+- [2026-04-13] CHC (7-8, 5th NL Central) @ PHI (7-8, 3rd NL East) | Pitchers: Javier Assad vs Cristopher Sánchez
+- [2026-04-13] LAA (8-8, 3rd AL West) @ NYY (8-7, 2nd AL East) | Pitchers: Yusei Kikuchi vs Will Warren | Hot: Ben Rice (.756 SLG)
+- [2026-04-13] MIA (8-8, 2nd NL East) @ ATL (10-6, 1st NL East) | Pitchers: Eury Pérez vs Grant Holmes
+- [2026-04-13] BOS (6-9, 5th AL East) @ MIN (9-7, 1st AL Central) | Pitchers: Garrett Crochet vs Bailey Ober
+- [2026-04-13] CLE (9-7, 2nd AL Central) @ STL (8-7, 3rd NL Central) | Pitchers: Gavin Williams vs Matthew Liberatore | Hot: Jordan Walker (7 HR)
+- [2026-04-13] TEX (8-7, 1st AL West) @ OAK (8-7, 2nd AL West) | Pitchers: Nathan Eovaldi vs Luis Severino
+- [2026-04-13] NYM (7-9, 5th NL East) @ LAD (11-4, 1st NL West) | Pitchers: David Peterson vs Justin Wrobleski | Hot: Andy Pages (1.181 OPS)
+- [2026-04-14] ARI (9-7, 3rd NL West) @ BAL (8-7, 3rd AL East) | Pitchers: Merrill Kelly vs Trevor Rogers | Hot: Gunnar Henderson (6 HR)
+- [2026-04-14] KCR (7-9, 3rd AL Central) @ DET (7-9, 4th AL Central) | Pitchers: Cole Ragans vs Framber Valdez
+- [2026-04-14] WSN (7-8, 4th NL East) @ PIT (9-6, 1st NL Central) | Pitchers: Miles Mikolas vs Mitch Keller
+- [2026-04-14] SFG (6-10, 4th NL West) @ CIN (9-7, 2nd NL Central) | Pitchers: Robbie Ray vs Brady Singer
+- [2026-04-14] CHC (7-8, 5th NL Central) @ PHI (7-8, 3rd NL East) | Pitchers: Colin Rea vs Aaron Nola
+- [2026-04-14] LAA (8-8, 3rd AL West) @ NYY (8-7, 2nd AL East) | Pitchers: Reid Detmers vs Ryan Weathers | Hot: Ben Rice (.756 SLG)
+- [2026-04-14] MIA (8-8, 2nd NL East) @ ATL (10-6, 1st NL East) | Pitchers: Max Meyer vs Reynaldo López
+- [2026-04-14] BOS (6-9, 5th AL East) @ MIN (9-7, 1st AL Central) | Pitchers: Sonny Gray vs Mick Abel
+- [2026-04-14] TBR (8-7, 1st AL East) @ CHW (6-10, 5th AL Central) | Pitchers: Shane McClanahan vs Noah Schultz
+- [2026-04-14] TOR (6-9, 4th AL East) @ MIL (8-7, 4th NL Central) | Pitchers: Kevin Gausman vs Jacob Misiorowski
+- [2026-04-14] CLE (9-7, 2nd AL Central) @ STL (8-7, 3rd NL Central) | Pitchers: Joey Cantillo vs Michael McGreevy | Hot: Jordan Walker (7 HR)
+- [2026-04-14] COL (6-10, 5th NL West) @ HOU (6-10, 5th AL West) | Pitchers: TBD vs TBD | Hot: Yordan Alvarez (6 HR)
+- [2026-04-14] SEA (7-9, 4th AL West) @ SDP (10-6, 2nd NL West) | Pitchers: TBD vs Michael King
+- [2026-04-14] TEX (8-7, 1st AL West) @ OAK (8-7, 2nd AL West) | Pitchers: MacKenzie Gore vs Jeffrey Springs
+- [2026-04-14] NYM (7-9, 5th NL East) @ LAD (11-4, 1st NL West) | Pitchers: Nolan McLean vs Yoshinobu Yamamoto | Hot: Andy Pages (1.181 OPS)
+
