@@ -900,7 +900,8 @@ async function applyGeminiRecommendations(gamesList) {
         });
         
         if (!res.ok) {
-            console.warn("Gemini API call failed or not configured.");
+            const errData = await res.json().catch(() => ({}));
+            console.warn("Gemini API call failed:", errData);
             return;
         }
         

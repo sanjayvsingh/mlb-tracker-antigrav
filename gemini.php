@@ -123,7 +123,7 @@ $prompt = "You are an MLB analyst. Below is a list of all MLB games over the nex
     . "Games:\n" . $gamesList;
 
 
-$url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=" . $gemini_api_key;
+$url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=" . $gemini_api_key;
 
 $data = [
     "contents" => [
@@ -148,6 +148,7 @@ curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For local/shared host compat
 $maxRetries = 3;
 $response = false;
 $httpcode = 500;
+$curlError = "";
 
 for ($i = 0; $i < $maxRetries; $i++) {
     $response = curl_exec($ch);
@@ -156,8 +157,10 @@ for ($i = 0; $i < $maxRetries; $i++) {
     if ($httpcode == 200) {
         break;
     }
+    
+    $curlError = curl_error($ch);
     // Wait 2 seconds before retrying if rate limited or server error
-    sleep(2);
+    if ($i < $maxRetries - 1) sleep(2);
 }
 
 curl_close($ch);
@@ -173,10 +176,19 @@ if ($httpcode == 200) {
         echo $geminiText;
     } else {
         http_response_code(500);
-        echo json_encode(["error" => "Unexpected Gemini response structure", "details" => $response]);
+        echo json_encode([
+            "error" => "Unexpected Gemini response structure",
+            "details" => $response,
+            "http_code" => $httpcode
+        ]);
     }
 } else {
-    http_response_code($httpcode);
-    echo json_encode(["error" => "Gemini API call failed", "details" => $response]);
+    http_response_code($httpcode ?: 500);
+    echo json_encode([
+        "error" => "Gemini API call failed",
+        "details" => $response,
+        "curl_error" => $curlError,
+        "http_code" => $httpcode
+    ]);
 }
 ?>
