@@ -15,7 +15,8 @@ While built for personal use, it's also a great way for any fan to see what inte
 - **Real-time Game Tracking**: Fetches live data from the MLB Stats API.
 - **Unseen Team Highlights**: Automatically identifies matchups with teams you haven't watched yet.
 - **Priority Filtering**: Filter for "Top Priority" games where both teams are unseen.
-- **Gemini AI Recommendations**: Uses AI to automatically identify and showcase 3 compelling games every day.
+- **Gemini AI Recommendations**: Uses AI to automatically identify and showcase 5 compelling games across the 3-day window.
+- **Showcase Toast Notifications**: Visual confirmation when AI recommendations load or encounter errors.
 - **Metrics Shelf**: Visual representation of your season progress.
 - **Material Icons**: Clean, consistent UI using Material Design iconography.
 - **Mobile Responsive**: Designed to look great on any device.
@@ -30,7 +31,8 @@ The application integrates data from multiple real-time sources to calculate the
   - `schedule`: Retrieves the 3-day game window, hydrated with `probablePitcher` and `broadcasts`.
 
 - **Google Gemini API**:
-  - `gemini-2.5-flash`: Securely proxied through a PHP backend (`gemini.php`) to fetch short, dynamic reasons to watch targeted MLB games and caches them locally for 6 hours to conserve API limits.
+  - `gemini-3-flash-preview`: Securely proxied through a PHP backend (`gemini.php`) to fetch short, dynamic reasons to watch targeted MLB games and caches them locally for 6 hours to conserve API limits.
+  - `gemini-3.1-flash-lite-preview`: Used automatically when `debugDate` is set, to conserve quota during testing.
 
 ## 🔗 URL Parameters
 
@@ -40,7 +42,7 @@ You can customize the application state using the following parameters:
 | :--- | :--- | :--- |
 | `u` | `s` | **Owner Mode**: Initializes your local device as the "Owner" to sync with the master Google Sheet. |
 | `seen` | `CSV` (e.g., `ARI,ATL`) | **Share Mode**: Overrides local seen status with a specific list of team abbreviations (ideal for sharing with friends). |
-| `debugDate`| `YYYY-MM-DD` | **Debug Mode**: Mocks the "current" date to view historical or future schedules. |
+| `debugDate`| `YYYY-MM-DD` | **Debug Mode**: Mocks the "current" date to view historical or future schedules. Also switches to a lighter Gemini model to conserve API quota. |
 
 ## 🛠️ Tech Stack
 

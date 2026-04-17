@@ -123,7 +123,11 @@ $prompt = "You are an MLB analyst. Below is a list of all MLB games over the nex
     . "Games:\n" . $gamesList;
 
 
-$url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=" . $gemini_api_key;
+$model = "gemini-3-flash-preview";
+if ($debugDate) {
+    $model = "gemini-3.1-flash-lite-preview";
+}
+$url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $gemini_api_key;
 
 $data = [
     "contents" => [

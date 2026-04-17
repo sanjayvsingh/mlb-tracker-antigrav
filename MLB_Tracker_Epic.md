@@ -86,6 +86,20 @@ A working prototype exists using vanilla HTML, CSS, and JS. The goal for the off
   - Add a +1 bump to the matched games' Fun Score.
   - Reveal the AI's 1-sentence reasoning as a tooltip when hovering over the Showcase badge.
 
+**STORY 4.4: Showcase Toast Notifications**
+- **As a** user, **I want** a brief visual notification when AI showcase recommendations finish loading, **So that** I know when the showcase badges have been applied without needing to manually check.
+- **Acceptance Criteria:**
+  - On successful load (from cache or live API), display a pill-shaped toast in the bottom-right corner for 3 seconds with a pink ✨ icon and the label "Showcase Games Loaded".
+  - On error, display the same toast with a red ✨ icon and the label "Showcase Loading Error" for 5 seconds.
+  - The toast should animate in from below and fade out gracefully.
+  - Only one toast should be visible at a time; a new toast replaces any existing one.
+
+**STORY 4.5: Debug Mode Cost Protection**
+- **As a** developer, **I want** the Gemini API to automatically use a cheaper model (`gemini-3.1-flash-lite-preview`) when `debugDate` is set, **So that** I can test the AI integration without consuming expensive API quota.
+- **Acceptance Criteria:**
+  - When the `debugDate` parameter is present in the request payload, both `gemini.php` and `server.ps1` must route to `gemini-3.1-flash-lite-preview` instead of `gemini-3-flash-preview`.
+  - Production requests (no `debugDate`) must continue to use `gemini-3-flash-preview`.
+
 ---
 
 ### Epic 5: Filtering Schedule

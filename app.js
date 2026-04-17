@@ -855,6 +855,31 @@ function formatDateForTab(d, prefix) {
     return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).replace(',', '')}`;
 }
 
+function showToast(type) {
+    const existing = document.getElementById('gemini-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'gemini-toast';
+    toast.className = `toast-notification ${type === 'success' ? 'toast-success success-anim' : 'toast-error error-anim'}`;
+    
+    const icon = document.createElement('span');
+    icon.className = 'material-icons toast-icon';
+    icon.textContent = 'auto_awesome';
+
+    const text = document.createElement('span');
+    text.className = 'toast-text';
+    text.textContent = type === 'success' ? 'Showcase Games Loaded' : 'Showcase Loading Error';
+
+    toast.appendChild(icon);
+    toast.appendChild(text);
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        if (toast.parentNode) toast.remove();
+    }, type === 'success' ? 3000 : 5000);
+}
+
 async function applyGeminiRecommendations(gamesList) {
     if (!gamesList || gamesList.length === 0) return;
     
@@ -904,6 +929,7 @@ async function applyGeminiRecommendations(gamesList) {
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
             console.warn("Gemini API call failed:", errData);
+            showToast('error');
             return;
         }
         
@@ -948,9 +974,13 @@ async function applyGeminiRecommendations(gamesList) {
             });
             // Re-render once matches are applied
             renderGames();
+            showToast('success');
+        } else {
+            showToast('error');
         }
     } catch (e) {
         console.warn("Skipping Gemini recommendations locally:", e);
+        showToast('error');
     }
 }
 
