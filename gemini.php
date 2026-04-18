@@ -118,7 +118,7 @@ foreach ($input['games'] as $g) {
     $gamesList .= $line . "\n";
 }
 
-$startDateLabel = $debugDate ? $debugDate : "today";
+$startDateLabel = $safeDebugDate ? $safeDebugDate : "today";
 $prompt = "You are an MLB analyst. Below is a list of all MLB games over the next three days (starting " . $startDateLabel . "), with each team's current record, division standing, probable pitchers, hot hitters, and milestone watches.\n\n"
     . "Evaluate ALL of the games below and select the five most compelling to watch. Prioritize:\n"
     . "- Meaningful rivalry or divisional matchups with playoff implications\n"
@@ -153,7 +153,7 @@ curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For local/shared host compatibility
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true); // Enforce SSL to prevent MITM
 
 $maxRetries = 3;
 $response = false;

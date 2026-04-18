@@ -59,6 +59,29 @@ function getToday() {
     return new Date();
 }
 
+// Helper for caching heavy API requests
+async function fetchJSONWithCache(url, ttlMs) {
+    const cacheKey = `mlb_cache_${url}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+        try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < ttlMs) {
+                return parsed.data;
+            }
+        } catch (e) {}
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const data = await res.json();
+    try {
+        localStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data }));
+    } catch (e) {
+        console.warn("Storage full", e);
+    }
+    return data;
+}
+
 // State
 let myUnseenTeams = [...MLB_OFFICIAL_NAMES]; 
 let allTeamsDetailed = []; // From standings
@@ -374,8 +397,8 @@ async function fetchHotHittersAndMilestones() {
         const leaderLimit = now < may1 ? 3 : 5;
 
         const url = `${STATS_API_BASE}/stats/leaders?leaderCategories=homeRuns,sluggingPercentage,onBasePlusSlugging&statGroup=hitting&limit=${leaderLimit}&season=${year}`;
-        const res = await fetch(url);
-        const data = await res.json();
+        const TTL_12H = 12 * 60 * 60 * 1000;
+        const data = await fetchJSONWithCache(url, TTL_12H);
         (data.leagueLeaders || []).forEach(cat => {
             (cat.leaders || []).forEach(leader => {
                 const nickname = findNicknameFromApiName(leader.team?.name);
@@ -412,8 +435,8 @@ async function fetchHotHittersAndMilestones() {
         try {
             // Fetch top 100 career leaders; active players near milestones will surface naturally
             const url = `${STATS_API_BASE}/stats/leaders?leaderCategories=${category}&statGroup=${group}&statType=career&limit=100`;
-            const res = await fetch(url);
-            const data = await res.json();
+            const TTL_12H = 12 * 60 * 60 * 1000;
+            const data = await fetchJSONWithCache(url, TTL_12H);
             ((data.leagueLeaders?.[0]?.leaders) || []).forEach(leader => {
                 const value = parseInt(leader.value, 10);
                 for (const target of targets) {
@@ -447,8 +470,8 @@ async function fetchStandings() {
     try {
         const year = getToday().getFullYear();
         const url = `${STATS_API_BASE}/standings?leagueId=103,104&season=${year}&standingsTypes=regularSeason`;
-        const res = await fetch(url);
-        const data = await res.json();
+        const TTL_1H = 60 * 60 * 1000;
+        const data = await fetchJSONWithCache(url, TTL_1H);
         
         if (data && data.records && data.records.length > 0) {
             standingsData = data.records;
