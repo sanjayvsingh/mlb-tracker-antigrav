@@ -94,11 +94,12 @@ A working prototype exists using vanilla HTML, CSS, and JS. The goal for the off
   - The toast should animate in from below and fade out gracefully.
   - Only one toast should be visible at a time; a new toast replaces any existing one.
 
-**STORY 4.5: Debug Mode Cost Protection**
-- **As a** developer, **I want** the Gemini API to automatically use a cheaper model (`gemini-3.1-flash-lite-preview`) when `debugDate` is set, **So that** I can test the AI integration without consuming expensive API quota.
+**STORY 4.5: Debug Mode & API Fallback Protection**
+- **As a** developer, **I want** the Gemini API to gracefully fall back to a lighter model (`gemini-3.1-flash-lite-preview`) when the primary model hits a rate limit (429), is unavailable (503), or when `debugDate` is set, **So that** I can test the AI integration efficiently and ensure the application never fails out due to API throttling.
 - **Acceptance Criteria:**
-  - When the `debugDate` parameter is present in the request payload, both `gemini.php` and `server.ps1` must route to `gemini-3.1-flash-lite-preview` instead of `gemini-3-flash-preview`.
-  - Production requests (no `debugDate`) must continue to use `gemini-3-flash-preview`.
+  - When the `debugDate` parameter is present, bypass the primary model and route immediately to `gemini-3.1-flash-lite-preview`.
+  - In standard operation, route to `gemini-3-flash-preview`, but if the target API returns a 429 or 503 error, immediately re-route to the lighter model.
+  - Inject a `model_used` property into the JSON payload that allows the client to trace and console-log which model handled the final recommendation mapping.
 
 ---
 

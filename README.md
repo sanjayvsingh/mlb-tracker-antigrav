@@ -32,7 +32,7 @@ The application integrates data from multiple real-time sources to calculate the
 
 - **Google Gemini API**:
   - `gemini-3-flash-preview`: Securely proxied through a PHP backend (`gemini.php`) to fetch short, dynamic reasons to watch targeted MLB games and caches them locally for 6 hours to conserve API limits.
-  - `gemini-3.1-flash-lite-preview`: Used automatically when `debugDate` is set, to conserve quota during testing.
+  - `gemini-3.1-flash-lite-preview`: Serves as an automatic fallback if the primary model reaches its rate limit (429) or is unavailable (503). Also used automatically when `debugDate` is set to conserve quota during testing.
 
 ## 🔗 URL Parameters
 

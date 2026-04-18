@@ -61,6 +61,12 @@ try {
 
                 if ($cacheValid) {
                     $content = [System.IO.File]::ReadAllBytes($cacheFile)
+                    try {
+                        $cacheStr = [System.Text.Encoding]::UTF8.GetString($content)
+                        $cacheObj = ConvertFrom-Json $cacheStr
+                        $cacheObj | Add-Member -MemberType NoteProperty -Name "from_cache" -Value $true
+                        $content = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $cacheObj -Depth 5 -Compress))
+                    } catch {}
                     $response.ContentLength64 = $content.Length
                     $response.OutputStream.Write($content, 0, $content.Length)
                 } else {
@@ -154,17 +160,21 @@ try {
                         
                         $prompt = "You are an MLB analyst. Below is a list of all MLB games over the next three days (starting $startDateLabel), with each team's current record, division standing, probable pitchers, hot hitters, and milestone watches.`n`nEvaluate ALL of the games below and select the five most compelling to watch. Prioritize:`n- Meaningful rivalry or divisional matchups with playoff implications`n- Exceptional or historic pitching duels`n- Players chasing milestones or on hot streaks`n- Comeback stories, prospect debuts, or unusual storylines`n`nYou MUST ONLY choose from the games listed below. You MUST include the exact date for each pick.`nReturn ONLY valid JSON in this format: {`"games`":[{`"date`":`"YYYY-MM-DD`",`"a`":`"AWAY_TEAM_CODE`",`"h`":`"HOME_TEAM_CODE`",`"r`":`"1 sentence reason`"}]}`n`nGames:`n$gamesList"
                         
-                        $model = "gemini-3-flash-preview"
+                        $primaryModel = "gemini-3-flash-preview"
+                        $lightModel = "gemini-3.1-flash-lite-preview"
+                        $currentModel = $primaryModel
+                        
                         if ($debugDate) {
-                            $model = "gemini-3.1-flash-lite-preview"
+                            $currentModel = $lightModel
                         }
-                        $uri = "https://generativelanguage.googleapis.com/v1beta/models/$model`:`generateContent?key=$geminiApiKey"
-                        $body = @{
+                        
+                        $bodyObj = @{
                             contents = @(
                                 @{ parts = @( @{ text = $prompt } ) }
                             )
                             generationConfig = @{ response_mime_type = "application/json" }
-                        } | ConvertTo-Json -Depth 5
+                        }
+                        $body = $bodyObj | ConvertTo-Json -Depth 5
                         
                         try {
                             Write-Host "Calling Gemini API ($startDateLabel)..."
@@ -173,15 +183,33 @@ try {
                             
                             for ($i = 0; $i -lt $maxRetries; $i++) {
                                 try {
+                                    $uri = "https://generativelanguage.googleapis.com/v1beta/models/$currentModel`:`generateContent?key=$geminiApiKey"
                                     $geminiResp = Invoke-RestMethod -Uri $uri -Method Post -Body $body -ContentType "application/json"
                                     break
                                 } catch {
+                                    if (($_.Exception.Message -match "429" -or $_.Exception.Message -match "503") -and $currentModel -ne $lightModel) {
+                                        # Fall back to light model
+                                        $currentModel = $lightModel
+                                        continue
+                                    }
+                                    
                                     if ($i -eq $maxRetries - 1) { throw }
                                     Start-Sleep -Seconds 2
                                 }
                             }
                             
                             $geminiText = $geminiResp.candidates[0].content.parts[0].text
+                            
+                            # Inject model_used
+                            $cleanText = $geminiText -replace '(?i)^```json\s*|\s*```$', ''
+                            try {
+                                $geminiObj = ConvertFrom-Json $cleanText
+                                $geminiObj | Add-Member -MemberType NoteProperty -Name "model_used" -Value $currentModel
+                                $geminiText = ConvertTo-Json $geminiObj -Depth 5 -Compress
+                            } catch { 
+                                # Ignore parse errors and just return raw text
+                            }
+                            
                             $responseBytes = [System.Text.Encoding]::UTF8.GetBytes($geminiText)
                             
                             [System.IO.File]::WriteAllBytes($cacheFile, $responseBytes)

@@ -60,7 +60,7 @@ function getToday() {
 }
 
 // State
-let myUnseenTeams = []; 
+let myUnseenTeams = [...MLB_OFFICIAL_NAMES]; 
 let allTeamsDetailed = []; // From standings
 let standingsData = null; // Store raw standings for record and rank
 let gamesData = { today: [], tomorrow: [], dayafter: [] };
@@ -938,6 +938,12 @@ async function applyGeminiRecommendations(gamesList) {
         const data = JSON.parse(cleanText);
         
         if (data && data.games) {
+            if (data.from_cache) {
+                console.log(`[Gemini Proxy] Results loaded from cache.`);
+            }
+            if (data.model_used) {
+                console.log(`[Gemini Proxy] Response generated using model: ${data.model_used}`);
+            }
             const allStorage = [gamesData.today, gamesData.tomorrow, gamesData.dayafter];
             data.games.forEach(reco => {
                 const awayTeam = reco.a || reco.awayTeam;

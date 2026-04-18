@@ -51,7 +51,14 @@ if (file_exists($cacheFile)) {
 
 if ($cacheValid) {
     // Return cached response
-    echo file_get_contents($cacheFile);
+    $cachedData = file_get_contents($cacheFile);
+    $cachedObj = json_decode($cachedData, true);
+    if ($cachedObj) {
+        $cachedObj['from_cache'] = true;
+        echo json_encode($cachedObj);
+    } else {
+        echo $cachedData;
+    }
     exit;
 }
 
@@ -123,11 +130,10 @@ $prompt = "You are an MLB analyst. Below is a list of all MLB games over the nex
     . "Games:\n" . $gamesList;
 
 
-$model = "gemini-3-flash-preview";
-if ($debugDate) {
-    $model = "gemini-3.1-flash-lite-preview";
-}
-$url = "https://generativelanguage.googleapis.com/v1beta/models/" . $model . ":generateContent?key=" . $gemini_api_key;
+$primaryModel = "gemini-3-flash-preview";
+$lightModel = "gemini-3.1-flash-lite-preview";
+
+$currentModel = $debugDate ? $lightModel : $primaryModel;
 
 $data = [
     "contents" => [
@@ -142,7 +148,7 @@ $data = [
     ]
 ];
 
-$ch = curl_init($url);
+$ch = curl_init();
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
 curl_setopt($ch, CURLOPT_POST, true);
@@ -155,6 +161,9 @@ $httpcode = 500;
 $curlError = "";
 
 for ($i = 0; $i < $maxRetries; $i++) {
+    $url = "https://generativelanguage.googleapis.com/v1beta/models/" . $currentModel . ":generateContent?key=" . $gemini_api_key;
+    curl_setopt($ch, CURLOPT_URL, $url);
+    
     $response = curl_exec($ch);
     $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     
@@ -163,7 +172,14 @@ for ($i = 0; $i < $maxRetries; $i++) {
     }
     
     $curlError = curl_error($ch);
-    // Wait 2 seconds before retrying if rate limited or server error
+    
+    // Fall back to the light model if primary hits rate limit or is unavailable
+    if (($httpcode == 429 || $httpcode == 503) && $currentModel !== $lightModel) {
+        $currentModel = $lightModel;
+        continue;
+    }
+    
+    // Wait 2 seconds before retrying if rate limited (on light model) or server error
     if ($i < $maxRetries - 1) sleep(2);
 }
 
@@ -174,6 +190,13 @@ if ($httpcode == 200) {
     // Try to extract the JSON text from Gemini's response structure
     if (isset($responseData['candidates'][0]['content']['parts'][0]['text'])) {
         $geminiText = $responseData['candidates'][0]['content']['parts'][0]['text'];
+
+        $cleanText = preg_replace('/```json|```/i', '', $geminiText);
+        $geminiObj = json_decode(trim($cleanText), true);
+        if ($geminiObj) {
+            $geminiObj['model_used'] = $currentModel;
+            $geminiText = json_encode($geminiObj);
+        }
 
         // Write the successfully parsed response to cache
         file_put_contents($cacheFile, $geminiText);
