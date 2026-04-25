@@ -101,6 +101,14 @@ A working prototype exists using vanilla HTML, CSS, and JS. The goal for the off
   - In standard operation, route to `gemini-3-flash-preview`, but if the target API returns a 429 or 503 error, immediately re-route to the lighter model.
   - Inject a `model_used` property into the JSON payload that allows the client to trace and console-log which model handled the final recommendation mapping.
 
+**STORY 4.6: Sportsnet Featured Broadcasts Integration**
+- **As a** Canadian user, **I want** games broadcasting on Sportsnet to show a "Sportsnet" badge on my schedule, **So that** I easily know which games I can watch on my local sports package without manually checking TV listings.
+- **Acceptance Criteria:**
+  - Securely fetch the Sportsnet schedule through a PHP backend scraper (`sportsnet.php`) caching results for 12 hours.
+  - Parse events from URL slugs (e.g., `Cleveland_Toronto_12345`) to reliably extract away and home teams.
+  - Implement a lightweight, fail-open geo-IP check so that `fetchSportsnetGames()` only executes and renders badges for users in Canada.
+  - Successfully map Sportsnet games to the live MLB API schedule, allowing them to appear automatically in the "Featured Broadcasts" filter.
+
 ---
 
 ### Epic 5: Filtering Schedule

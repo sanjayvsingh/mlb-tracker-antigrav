@@ -34,6 +34,9 @@ The application integrates data from multiple real-time sources to calculate the
   - `gemini-3-flash-preview`: Securely proxied through a PHP backend (`gemini.php`) to fetch short, dynamic reasons to watch targeted MLB games and caches them locally for 6 hours to conserve API limits.
   - `gemini-3.1-flash-lite-preview`: Serves as an automatic fallback if the primary model reaches its rate limit (429) or is unavailable (503). Also used automatically when `debugDate` is set to conserve quota during testing.
 
+- **Sportsnet Scraping API**:
+  - `sportsnet.php`: A backend scraper that parses live and upcoming MLB matchups from Sportsnet's watch page. Includes a lightweight geo-IP check so that badges are only shown to users located in Canada. Caches results locally for 12 hours.
+
 ## 🔗 URL Parameters
 
 You can customize the application state using the following parameters:

@@ -231,6 +231,150 @@ try {
                 continue
             }
             
+            # Sportsnet scraper endpoint
+            if ($localPath -eq 'sportsnet.php' -and $context.Request.HttpMethod -eq 'GET') {
+                $response.AddHeader("Access-Control-Allow-Origin", "*")
+                $response.ContentType = "application/json"
+
+                $snCacheFile = Join-Path $PSScriptRoot "sportsnet_cache.json"
+                $snCacheValid = $false
+
+                if (Test-Path $snCacheFile) {
+                    $snLastWrite = (Get-Item $snCacheFile).LastWriteTime
+                    if ((Get-Date) - $snLastWrite -lt (New-TimeSpan -Hours 12)) {
+                        $snCacheValid = $true
+                    }
+                }
+
+                if ($snCacheValid) {
+                    $snContent = [System.IO.File]::ReadAllBytes($snCacheFile)
+                    try {
+                        $snStr = [System.Text.Encoding]::UTF8.GetString($snContent)
+                        $snObj = ConvertFrom-Json $snStr
+                        $snObj | Add-Member -MemberType NoteProperty -Name "from_cache" -Value $true -Force
+                        $snContent = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $snObj -Depth 5 -Compress))
+                    } catch {}
+                    $response.ContentLength64 = $snContent.Length
+                    $response.OutputStream.Write($snContent, 0, $snContent.Length)
+                } else {
+                    try {
+                        Write-Host "Fetching Sportsnet MLB schedule..."
+                        $snUrl = "https://watch.sportsnet.ca/leagues/MLB_155233"
+                        $snHtml = Invoke-WebRequest -Uri $snUrl -UseBasicParsing -TimeoutSec 15 -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+
+                        $snText = $snHtml.Content
+
+                        # Slug-to-team mapping (longest patterns first for greedy match)
+                        $slugTeams = [ordered]@{
+                            'New_York_Yankees' = 'New York Yankees'
+                            'New_York_Mets' = 'New York Mets'
+                            'Los_Angeles_Dodgers' = 'Los Angeles Dodgers'
+                            'Los_Angeles_Angels' = 'Los Angeles Angels'
+                            'Chicago_Cubs' = 'Chicago Cubs'
+                            'Chicago_White_Sox' = 'Chicago White Sox'
+                            'San_Francisco' = 'San Francisco'
+                            'San_Diego' = 'San Diego'
+                            'St_Louis' = 'St. Louis'
+                            'Tampa_Bay' = 'Tampa Bay'
+                            'Kansas_City' = 'Kansas City'
+                            'New_York' = 'New York'
+                            'Los_Angeles' = 'Los Angeles'
+                            'Cleveland' = 'Cleveland'
+                            'Toronto' = 'Toronto'
+                            'Boston' = 'Boston'
+                            'Houston' = 'Houston'
+                            'Baltimore' = 'Baltimore'
+                            'Detroit' = 'Detroit'
+                            'Minnesota' = 'Minnesota'
+                            'Seattle' = 'Seattle'
+                            'Texas' = 'Texas'
+                            'Oakland' = 'Oakland'
+                            'Atlanta' = 'Atlanta'
+                            'Miami' = 'Miami'
+                            'Philadelphia' = 'Philadelphia'
+                            'Washington' = 'Washington'
+                            'Cincinnati' = 'Cincinnati'
+                            'Milwaukee' = 'Milwaukee'
+                            'Pittsburgh' = 'Pittsburgh'
+                            'Arizona' = 'Arizona'
+                            'Colorado' = 'Colorado'
+                        }
+
+                        $snGames = @()
+                        $snSeen = @{}
+
+                        # Extract event URLs and their surrounding text
+                        $eventMatches = [regex]::Matches($snText, '<a[^>]*href="([^"]*?/event/([^"]+))"[^>]*>(.*?)</a>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                        
+                        foreach ($em in $eventMatches) {
+                            $eventSlug = $em.Groups[2].Value
+                            $linkText = $em.Groups[3].Value -replace '<[^>]+>', ''
+                            
+                            # Skip duplicates and replays
+                            if ($snSeen.ContainsKey($eventSlug)) { continue }
+                            if ($linkText -match 'REPLAY') { continue }
+                            if ($linkText -notmatch '(LIVE|UPCOMING)') { continue }
+
+                            $snStatus = "UPCOMING"
+                            if ($linkText -match 'LIVE') { $snStatus = "LIVE" }
+
+                            # Parse teams from slug (e.g. "Cleveland_Toronto_212498")
+                            $slugClean = $eventSlug -replace '_\d+$', ''
+                            
+                            $snAway = $null
+                            $remaining = $slugClean
+                            foreach ($pattern in $slugTeams.Keys) {
+                                if ($remaining.StartsWith($pattern)) {
+                                    $snAway = $slugTeams[$pattern]
+                                    $remaining = $remaining.Substring($pattern.Length).TrimStart('_')
+                                    break
+                                }
+                            }
+                            
+                            $snHome = $null
+                            if ($snAway -and $remaining) {
+                                foreach ($pattern in $slugTeams.Keys) {
+                                    if ($remaining -eq $pattern) {
+                                        $snHome = $slugTeams[$pattern]
+                                        break
+                                    }
+                                }
+                            }
+                            
+                            if (-not $snAway -or -not $snHome) { continue }
+
+                            $snSeen[$eventSlug] = $true
+                            $snGames += @{
+                                away = $snAway
+                                home = $snHome
+                                status = $snStatus
+                                url = "https://watch.sportsnet.ca/event/$eventSlug"
+                            }
+                        }
+
+                        $snResult = @{ games = $snGames; from_cache = $false }
+                        $snJson = ConvertTo-Json $snResult -Depth 5 -Compress
+                        
+                        # Cache result
+                        [System.IO.File]::WriteAllText($snCacheFile, $snJson, [System.Text.Encoding]::UTF8)
+                        
+                        $snBytes = [System.Text.Encoding]::UTF8.GetBytes($snJson)
+                        $response.ContentLength64 = $snBytes.Length
+                        $response.OutputStream.Write($snBytes, 0, $snBytes.Length)
+                        Write-Host "Sportsnet: Found $($snGames.Count) games"
+                    } catch {
+                        Write-Host "Sportsnet fetch failed: $($_.Exception.Message)"
+                        $snError = '{"error":"Failed to fetch Sportsnet schedule","details":"' + ($_.Exception.Message -replace '"', "'") + '"}'
+                        $snErrorBytes = [System.Text.Encoding]::UTF8.GetBytes($snError)
+                        $response.StatusCode = 502
+                        $response.ContentLength64 = $snErrorBytes.Length
+                        $response.OutputStream.Write($snErrorBytes, 0, $snErrorBytes.Length)
+                    }
+                }
+                $response.Close()
+                continue
+            }
+
             $filePath = Join-Path $PSScriptRoot $localPath
             
             # Block sensitive file extensions

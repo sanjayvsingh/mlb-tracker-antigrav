@@ -136,6 +136,9 @@ async function loadEverything() {
         renderMetrics();
         renderGames();
 
+        // Phase 2.5: Apply Sportsnet featured broadcasts (non-blocking)
+        fetchSportsnetGames(); // No await — runs in background
+
         // Phase 3: Fire Gemini in background (needs all enrichment data for prompt)
         const allGames = [...(gamesData.today || []), ...(gamesData.tomorrow || []), ...(gamesData.dayafter || [])];
         if (allGames.length > 0) {
@@ -1010,6 +1013,136 @@ async function applyGeminiRecommendations(gamesList) {
     } catch (e) {
         console.warn("Skipping Gemini recommendations locally:", e);
         showToast('error');
+    }
+}
+
+// Sportsnet name -> MLB nickname mapping
+// Sportsnet uses city names (e.g., "Cleveland", "Toronto") while MLB API uses
+// full names ("Cleveland Guardians"). This lookup handles ambiguous cities.
+const SPORTSNET_TEAM_MAP = {
+    'New York Yankees': 'Yankees',
+    'New York Mets': 'Mets',
+    'Chicago Cubs': 'Cubs',
+    'Chicago White Sox': 'White Sox',
+    'Los Angeles Dodgers': 'Dodgers',
+    'Los Angeles Angels': 'Angels',
+    'Los Angeles': 'Dodgers',
+    'Cleveland': 'Guardians',
+    'Toronto': 'Blue Jays',
+    'Boston': 'Red Sox',
+    'Houston': 'Astros',
+    'Baltimore': 'Orioles',
+    'Detroit': 'Tigers',
+    'Minnesota': 'Twins',
+    'Seattle': 'Mariners',
+    'Texas': 'Rangers',
+    'Oakland': 'Athletics',
+    'Atlanta': 'Braves',
+    'Miami': 'Marlins',
+    'Philadelphia': 'Phillies',
+    'Washington': 'Nationals',
+    'Cincinnati': 'Reds',
+    'Milwaukee': 'Brewers',
+    'Pittsburgh': 'Pirates',
+    'St. Louis': 'Cardinals',
+    'Arizona': 'Diamondbacks',
+    'Colorado': 'Rockies',
+    'San Diego': 'Padres',
+    'San Francisco': 'Giants',
+    'Tampa Bay': 'Rays',
+    'Kansas City': 'Royals',
+    // Also map full team names
+    'New York': 'Yankees' // Fallback — Sportsnet typically specifies "New York Yankees" or "New York Mets"
+};
+
+function sportsnetToNickname(snName) {
+    if (!snName) return null;
+    // Direct lookup first
+    if (SPORTSNET_TEAM_MAP[snName]) return SPORTSNET_TEAM_MAP[snName];
+    // Try partial matching
+    for (const [key, val] of Object.entries(SPORTSNET_TEAM_MAP)) {
+        if (snName.includes(key) || key.includes(snName)) return val;
+    }
+    // Last resort: check if the name IS a nickname already
+    if (MLB_OFFICIAL_NAMES.has(snName)) return snName;
+    return null;
+}
+
+async function fetchSportsnetGames() {
+    try {
+        // Only show Sportsnet broadcasts for Canadian users
+        try {
+            const geoRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) });
+            if (geoRes.ok) {
+                const geo = await geoRes.json();
+                const country = geo.country_code || geo.country || 'unknown';
+                console.log(`[Sportsnet] User detected in ${geo.country_name || country}`);
+                if (country !== 'CA') {
+                    console.log('[Sportsnet] Skipping — Sportsnet broadcasts are Canada-only');
+                    return;
+                }
+            }
+        } catch (geoErr) {
+            // If geo-detection fails, proceed anyway (fail-open)
+            console.warn('[Sportsnet] Geo-detection failed, proceeding:', geoErr.message);
+        }
+
+        const res = await fetch('sportsnet.php');
+        if (!res.ok) {
+            console.warn('Sportsnet fetch failed:', res.status);
+            return;
+        }
+        const data = await res.json();
+        if (data.from_cache) {
+            console.log('[Sportsnet] Loaded from cache');
+        }
+        if (!data.games || data.games.length === 0) {
+            console.log('[Sportsnet] No games found');
+            return;
+        }
+
+        console.log(`[Sportsnet] ${data.games.length} broadcasts available`);
+
+        const allSchedule = [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter];
+        let matched = 0;
+        const claimedIds = new Set(); // Track games already matched to avoid duplicates
+
+        data.games.forEach(snGame => {
+            const awayNick = sportsnetToNickname(snGame.away);
+            const homeNick = sportsnetToNickname(snGame.home);
+            if (!awayNick || !homeNick) {
+                console.warn(`[Sportsnet] Could not map: ${snGame.away} @ ${snGame.home}`);
+                return;
+            }
+
+            // Find an unclaimed matching game in the schedule
+            const match = allSchedule.find(g => {
+                if (claimedIds.has(g.id)) return false;
+                const gAway = g.away.nickname;
+                const gHome = g.home.nickname;
+                return gAway === awayNick && gHome === homeNick;
+            });
+
+            if (match) {
+                claimedIds.add(match.id);
+                // Add Sportsnet to featured networks if not already there
+                if (!match.featuredNetworks.includes('Sportsnet')) {
+                    match.featuredNetworks.push('Sportsnet');
+                    matched++;
+                }
+                // Store the Sportsnet URL for potential linking
+                if (snGame.url) {
+                    match.sportsnetUrl = snGame.url;
+                }
+            }
+        });
+
+        if (matched > 0) {
+            console.log(`[Sportsnet] Matched ${matched} games in 3-day window`);
+            renderGames();
+        }
+    } catch (e) {
+        console.warn('Sportsnet integration skipped:', e);
     }
 }
 
