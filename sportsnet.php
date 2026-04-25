@@ -9,6 +9,40 @@
 
 header('Content-Type: application/json');
 
+// Access Control Setup
+$allowed_origins = [
+    'https://mlb.sanvash.com',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080'
+];
+
+$origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
+
+if (in_array($origin, $allowed_origins)) {
+    header("Access-Control-Allow-Origin: " . $origin);
+    header("Access-Control-Allow-Methods: GET, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type, X-App-Token");
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Access Control: Require Custom App Token
+$appToken = isset($_SERVER['HTTP_X_APP_TOKEN']) ? $_SERVER['HTTP_X_APP_TOKEN'] : '';
+if (function_exists('getallheaders')) {
+    $headers = getallheaders();
+    if (isset($headers['X-App-Token'])) $appToken = $headers['X-App-Token'];
+    elseif (isset($headers['x-app-token'])) $appToken = $headers['x-app-token'];
+}
+
+if ($appToken !== 'mlb-tracker-v2') {
+    http_response_code(403);
+    echo json_encode(["error" => "Forbidden. Invalid or missing App Token."]);
+    exit;
+}
+
 $cacheFile = 'sportsnet_cache.json';
 $cacheTTL = 12 * 60 * 60; // 12 hours in seconds
 

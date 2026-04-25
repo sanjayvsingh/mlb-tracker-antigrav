@@ -19,16 +19,34 @@ try {
             }
             
             if ($context.Request.HttpMethod -eq 'OPTIONS') {
-                $response.AddHeader("Access-Control-Allow-Origin", "*")
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8080|http://127.0.0.1:8080|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
                 $response.AddHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-                $response.AddHeader("Access-Control-Allow-Headers", "Content-Type")
+                $response.AddHeader("Access-Control-Allow-Headers", "Content-Type, X-App-Token")
                 $response.StatusCode = 200
                 $response.Close()
                 continue
             }
 
             if ($localPath -eq 'gemini.php' -and $context.Request.HttpMethod -eq 'POST') {
-                $response.AddHeader("Access-Control-Allow-Origin", "*")
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8080|http://127.0.0.1:8080|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                
+                $appToken = $context.Request.Headers["X-App-Token"]
+                if ($appToken -ne "mlb-tracker-v2") {
+                    $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error": "Forbidden. Invalid or missing App Token."}')
+                    $response.StatusCode = 403
+                    $response.ContentType = "application/json"
+                    $response.ContentLength64 = $errorBytes.Length
+                    $response.OutputStream.Write($errorBytes, 0, $errorBytes.Length)
+                    $response.Close()
+                    continue
+                }
+
                 $response.ContentType = "application/json"
                 $cacheValid = $false
                 
@@ -233,7 +251,22 @@ try {
             
             # Sportsnet scraper endpoint
             if ($localPath -eq 'sportsnet.php' -and $context.Request.HttpMethod -eq 'GET') {
-                $response.AddHeader("Access-Control-Allow-Origin", "*")
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8080|http://127.0.0.1:8080|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                
+                $appToken = $context.Request.Headers["X-App-Token"]
+                if ($appToken -ne "mlb-tracker-v2") {
+                    $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error": "Forbidden. Invalid or missing App Token."}')
+                    $response.StatusCode = 403
+                    $response.ContentType = "application/json"
+                    $response.ContentLength64 = $errorBytes.Length
+                    $response.OutputStream.Write($errorBytes, 0, $errorBytes.Length)
+                    $response.Close()
+                    continue
+                }
+
                 $response.ContentType = "application/json"
 
                 $snCacheFile = Join-Path $PSScriptRoot "sportsnet_cache.json"

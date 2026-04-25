@@ -948,7 +948,10 @@ async function applyGeminiRecommendations(gamesList) {
     try {
         const res = await fetch('gemini.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'X-App-Token': 'mlb-tracker-v2'
+            },
             body: JSON.stringify(payload)
         });
         
@@ -1087,7 +1090,9 @@ async function fetchSportsnetGames() {
             console.warn('[Sportsnet] Geo-detection failed, proceeding:', geoErr.message);
         }
 
-        const res = await fetch('sportsnet.php');
+        const res = await fetch('sportsnet.php', {
+            headers: { 'X-App-Token': 'mlb-tracker-v2' }
+        });
         if (!res.ok) {
             console.warn('Sportsnet fetch failed:', res.status);
             return;

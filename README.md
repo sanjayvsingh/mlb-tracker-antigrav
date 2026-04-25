@@ -54,6 +54,14 @@ You can customize the application state using the following parameters:
 - **Data Source**: MLB Stats API, Google Gemini API.
 - **Icons**: [Material Icons](https://fonts.google.com/icons)
 
+## 🔒 Security
+
+The backend proxy scripts (`gemini.php` and `sportsnet.php`) include several layers of security to prevent unauthorized usage and quota abuse:
+
+- **Origin Validation**: Both scripts strictly validate the `Origin` and `Referer` headers. Only requests from `mlb.sanvash.com` or local development environments are processed.
+- **Custom Header Challenge**: Every request from the frontend must include a custom `X-App-Token` header. Requests missing this token or using an incorrect one are instantly rejected with a `403 Forbidden` response.
+- **Local Server Protection**: The `server.ps1` local testing script also enforces these same origin and token checks, and has wildcard CORS disabled for improved security.
+
 ## 🎯 Goal
 
 The primary goal of this project is to turn a manual tracking process into a seamless, automated experience. It's a practical use case for developing AI-assisted coding skills while building a tool that provides real, daily value to a baseball fan.
