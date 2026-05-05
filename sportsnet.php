@@ -162,6 +162,58 @@ function parseSlugTeams($slug, $teamMap) {
 $games = [];
 $seen = [];
 
+/**
+ * Parse the broadcast date from the Sportsnet link text.
+ * Examples:
+ *   "LIVE10:00 PM..."           → today
+ *   "UPCOMINGToday @ 10:00 PM..." → today
+ *   "UPCOMINGTomorrow @ 12:00 AM..." → tomorrow
+ *   "UPCOMINGThu, May 7 @ 4:30 PM..." → 2026-05-07
+ * Returns an ISO date string (YYYY-MM-DD) or null if unparseable.
+ */
+function parseBroadcastDate($linkText) {
+    $today = new DateTime('now', new DateTimeZone('America/Toronto'));
+
+    // LIVE games are always today
+    if (stripos($linkText, 'LIVE') !== false) {
+        return $today->format('Y-m-d');
+    }
+
+    // Strip the "UPCOMING" prefix
+    $text = preg_replace('/^.*?UPCOMING/i', '', $linkText);
+    $text = trim($text);
+
+    // "Today @ ..."
+    if (stripos($text, 'Today') === 0) {
+        return $today->format('Y-m-d');
+    }
+
+    // "Tomorrow @ ..."
+    if (stripos($text, 'Tomorrow') === 0) {
+        $tomorrow = clone $today;
+        $tomorrow->modify('+1 day');
+        return $tomorrow->format('Y-m-d');
+    }
+
+    // Absolute date like "Thu, May 7 @ 4:30 PM..." or "Sat, May 9 @ 2:00 AM..."
+    // Match pattern: "Day, Month Day @"
+    if (preg_match('/^[A-Za-z]+,\s+([A-Za-z]+)\s+(\d+)\s+@/i', $text, $dm)) {
+        $monthStr = $dm[1];
+        $dayNum = intval($dm[2]);
+        $year = intval($today->format('Y'));
+        $parsed = DateTime::createFromFormat('Y M j', "$year $monthStr $dayNum", new DateTimeZone('America/Toronto'));
+        if ($parsed) {
+            // Handle year rollover (e.g., December scrape showing January games)
+            if ($parsed < $today && intval($today->format('n')) >= 10 && intval($parsed->format('n')) <= 3) {
+                $parsed->modify('+1 year');
+            }
+            return $parsed->format('Y-m-d');
+        }
+    }
+
+    return null;
+}
+
 // Match all event links in the HTML
 if (preg_match_all('/<a[^>]*href=["\']([^"\']*\/event\/([^"\']+))["\'][^>]*>(.*?)<\/a>/si', $html, $matches, PREG_SET_ORDER)) {
     foreach ($matches as $m) {
@@ -178,6 +230,9 @@ if (preg_match_all('/<a[^>]*href=["\']([^"\']*\/event\/([^"\']+))["\'][^>]*>(.*?
         // Determine status
         $status = (stripos($linkText, 'LIVE') !== false) ? 'LIVE' : 'UPCOMING';
 
+        // Parse broadcast date from the link text
+        $broadcastDate = parseBroadcastDate($linkText);
+
         // Parse teams from the URL slug (much more reliable than the link text)
         $teams = parseSlugTeams($eventSlug, $SLUG_TEAMS);
         if (!$teams) continue;
@@ -185,12 +240,16 @@ if (preg_match_all('/<a[^>]*href=["\']([^"\']*\/event\/([^"\']+))["\'][^>]*>(.*?
         $eventUrl = 'https://watch.sportsnet.ca/event/' . $eventSlug;
 
         $seen[$eventSlug] = true;
-        $games[] = [
+        $game = [
             'away' => $teams['away'],
             'home' => $teams['home'],
             'status' => $status,
             'url' => $eventUrl
         ];
+        if ($broadcastDate) {
+            $game['date'] = $broadcastDate;
+        }
+        $games[] = $game;
     }
 }
 

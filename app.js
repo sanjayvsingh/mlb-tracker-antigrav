@@ -1125,7 +1125,13 @@ async function fetchSportsnetGames() {
                 if (claimedIds.has(g.id)) return false;
                 const gAway = g.away.nickname;
                 const gHome = g.home.nickname;
-                return gAway === awayNick && gHome === homeNick;
+                if (gAway !== awayNick || gHome !== homeNick) return false;
+                // If the Sportsnet broadcast has a date, only match games on that date
+                if (snGame.date) {
+                    const gameDate = getLocalDateString(g.date);
+                    if (gameDate !== snGame.date) return false;
+                }
+                return true;
             });
 
             if (match) {
