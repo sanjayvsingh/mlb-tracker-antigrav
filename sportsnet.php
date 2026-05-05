@@ -1,10 +1,16 @@
 <?php
 /**
- * sportsnet.php - Scrapes Sportsnet's MLB schedule page and returns
- * structured game data as JSON. Results are cached for 12 hours.
+ * sportsnet.php - Fetches Sportsnet's MLB schedule via their internal API
+ * and returns structured game data as JSON. Results are cached for 4 hours.
+ *
+ * Uses the sportschedules API endpoint which returns clean JSON per date,
+ * with accurate UTC event start times. We fetch today through day-after-tomorrow
+ * (plus an extra day to catch late-night UTC offsets) and group games by their
+ * Eastern Time local date.
  *
  * Endpoint: GET /sportsnet.php
- * Returns: { "games": [ { "away": "...", "home": "...", "status": "LIVE|UPCOMING", "url": "..." }, ... ], "from_cache": bool }
+ * Returns: { "games": [ { "away": "...", "home": "...", "status": "LIVE|UPCOMING",
+ *            "date": "YYYY-MM-DD", "url": "..." }, ... ], "from_cache": bool }
  */
 
 header('Content-Type: application/json');
@@ -44,7 +50,7 @@ if ($appToken !== 'mlb-tracker-v2') {
 }
 
 $cacheFile = 'sportsnet_cache.json';
-$cacheTTL = 12 * 60 * 60; // 12 hours in seconds
+$cacheTTL = 4 * 60 * 60; // 4 hours in seconds
 
 // Check cache
 if (file_exists($cacheFile)) {
@@ -59,197 +65,99 @@ if (file_exists($cacheFile)) {
     }
 }
 
-// Fetch the Sportsnet MLB page
-$url = 'https://watch.sportsnet.ca/leagues/MLB_155233';
+// Default fallback API base URL
+$apiBase = 'https://production-cdn.d3-rgr-diva.com/api';
 
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $url);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-$html = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$curlError = curl_error($ch);
-curl_close($ch);
+// Dynamically discover the API base URL from the Sportsnet homepage
+$homepageHtml = @file_get_contents('https://watch.sportsnet.ca/sportschedule', false, stream_context_create([
+    'http' => [
+        'method' => 'GET',
+        'header' => 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'timeout' => 5
+    ]
+]));
 
-if ($httpCode !== 200 || !$html) {
-    http_response_code(502);
-    echo json_encode([
-        'error' => 'Failed to fetch Sportsnet page',
-        'http_code' => $httpCode,
-        'curl_error' => $curlError
-    ]);
-    exit;
+if ($homepageHtml && preg_match("/env\.CLIENT_SERVICE_CDN_URL='([^']+)'/", $homepageHtml, $matches)) {
+    $apiBase = rtrim($matches[1], '/');
 }
 
-// Sportsnet event URL slug -> team name mapping
-// Slugs use underscores: "Cleveland_Toronto_212498", "Chicago_Cubs_Los_Angeles_Dodgers_212713"
-// Order matters: longer/more-specific patterns must come before shorter ones
-$SLUG_TEAMS = [
-    'New_York_Yankees' => 'New York Yankees',
-    'New_York_Mets' => 'New York Mets',
-    'Los_Angeles_Dodgers' => 'Los Angeles Dodgers',
-    'Los_Angeles_Angels' => 'Los Angeles Angels',
-    'Chicago_Cubs' => 'Chicago Cubs',
-    'Chicago_White_Sox' => 'Chicago White Sox',
-    'San_Francisco' => 'San Francisco',
-    'San_Diego' => 'San Diego',
-    'St_Louis' => 'St. Louis',
-    'Tampa_Bay' => 'Tampa Bay',
-    'Kansas_City' => 'Kansas City',
-    'New_York' => 'New York',
-    'Los_Angeles' => 'Los Angeles',
-    'Cleveland' => 'Cleveland',
-    'Toronto' => 'Toronto',
-    'Boston' => 'Boston',
-    'Houston' => 'Houston',
-    'Baltimore' => 'Baltimore',
-    'Detroit' => 'Detroit',
-    'Minnesota' => 'Minnesota',
-    'Seattle' => 'Seattle',
-    'Texas' => 'Texas',
-    'Oakland' => 'Oakland',
-    'Atlanta' => 'Atlanta',
-    'Miami' => 'Miami',
-    'Philadelphia' => 'Philadelphia',
-    'Washington' => 'Washington',
-    'Cincinnati' => 'Cincinnati',
-    'Milwaukee' => 'Milwaukee',
-    'Pittsburgh' => 'Pittsburgh',
-    'Arizona' => 'Arizona',
-    'Colorado' => 'Colorado',
-];
+// Ensure the base URL points to the sportschedules endpoint for MLB
+$apiBase .= '/sportschedules?competition=cp-mlb';
 
-/**
- * Parse two team names from a Sportsnet event slug like "Cleveland_Toronto_212498"
- * or "Chicago_Cubs_Los_Angeles_Dodgers_212713".
- */
-function parseSlugTeams($slug, $teamMap) {
-    // Remove trailing numeric ID
-    $slug = preg_replace('/_\d+$/', '', $slug);
-
-    $away = null;
-    $remaining = $slug;
-
-    // Try to match the away team from the start of the slug
-    foreach ($teamMap as $pattern => $name) {
-        if (strpos($remaining, $pattern) === 0) {
-            $away = $name;
-            // Remove the matched portion plus the separator underscore
-            $remaining = substr($remaining, strlen($pattern));
-            $remaining = ltrim($remaining, '_');
-            break;
-        }
-    }
-
-    if (!$away || empty($remaining)) return null;
-
-    // Now match the home team from what's left
-    $home = null;
-    foreach ($teamMap as $pattern => $name) {
-        if ($remaining === $pattern) {
-            $home = $name;
-            break;
-        }
-    }
-
-    if (!$home) return null;
-    return ['away' => $away, 'home' => $home];
+// We need to fetch enough dates to cover the 3-day window in ET.
+// A game at 11 PM ET on May 5 is filed as May 6 in UTC (3 AM UTC).
+// So we fetch today through day+3 to catch all games that fall within
+// our 3-day ET window.
+$today = new DateTime('now', new DateTimeZone('America/Toronto'));
+$dates = [];
+for ($i = 0; $i <= 3; $i++) {
+    $d = clone $today;
+    $d->modify("+$i day");
+    $dates[] = $d->format('Y-m-d');
 }
 
 $games = [];
 $seen = [];
+$et = new DateTimeZone('America/Toronto');
 
-/**
- * Parse the broadcast date from the Sportsnet link text.
- * Examples:
- *   "LIVE10:00 PM..."           → today
- *   "UPCOMINGToday @ 10:00 PM..." → today
- *   "UPCOMINGTomorrow @ 12:00 AM..." → tomorrow
- *   "UPCOMINGThu, May 7 @ 4:30 PM..." → 2026-05-07
- * Returns an ISO date string (YYYY-MM-DD) or null if unparseable.
- */
-function parseBroadcastDate($linkText) {
-    $today = new DateTime('now', new DateTimeZone('America/Toronto'));
+foreach ($dates as $dateStr) {
+    $url = $apiBase . '&date=' . $dateStr . '&page_size=50';
 
-    // LIVE games are always today
-    if (stripos($linkText, 'LIVE') !== false) {
-        return $today->format('Y-m-d');
-    }
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+    $body = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
 
-    // Strip the "UPCOMING" prefix
-    $text = preg_replace('/^.*?UPCOMING/i', '', $linkText);
-    $text = trim($text);
+    if ($httpCode !== 200 || !$body) continue;
 
-    // "Today @ ..."
-    if (stripos($text, 'Today') === 0) {
-        return $today->format('Y-m-d');
-    }
+    $data = json_decode($body, true);
+    if (!$data || !isset($data['items'])) continue;
 
-    // "Tomorrow @ ..."
-    if (stripos($text, 'Tomorrow') === 0) {
-        $tomorrow = clone $today;
-        $tomorrow->modify('+1 day');
-        return $tomorrow->format('Y-m-d');
-    }
+    foreach ($data['items'] as $item) {
+        // Skip non-events or already-seen items
+        if (($item['type'] ?? '') !== 'event') continue;
+        $id = $item['id'] ?? '';
+        if (isset($seen[$id])) continue;
+        $seen[$id] = true;
 
-    // Absolute date like "Thu, May 7 @ 4:30 PM..." or "Sat, May 9 @ 2:00 AM..."
-    // Match pattern: "Day, Month Day @"
-    if (preg_match('/^[A-Za-z]+,\s+([A-Za-z]+)\s+(\d+)\s+@/i', $text, $dm)) {
-        $monthStr = $dm[1];
-        $dayNum = intval($dm[2]);
-        $year = intval($today->format('Y'));
-        $parsed = DateTime::createFromFormat('Y M j', "$year $monthStr $dayNum", new DateTimeZone('America/Toronto'));
-        if ($parsed) {
-            // Handle year rollover (e.g., December scrape showing January games)
-            if ($parsed < $today && intval($today->format('n')) >= 10 && intval($parsed->format('n')) <= 3) {
-                $parsed->modify('+1 year');
-            }
-            return $parsed->format('Y-m-d');
-        }
-    }
+        $title = $item['title'] ?? '';
+        $path = $item['path'] ?? '';
+        $startUtc = $item['eventStartDate'] ?? '';
 
-    return null;
-}
+        if (!$title || !$startUtc) continue;
 
-// Match all event links in the HTML
-if (preg_match_all('/<a[^>]*href=["\']([^"\']*\/event\/([^"\']+))["\'][^>]*>(.*?)<\/a>/si', $html, $matches, PREG_SET_ORDER)) {
-    foreach ($matches as $m) {
-        $eventSlug = $m[2];
-        $linkText = strip_tags($m[3]);
+        // Parse teams from title (format: "Toronto @ Tampa Bay" or "Los Angeles Dodgers @ Houston")
+        $parts = preg_split('/\s+@\s+/', $title, 2);
+        if (count($parts) !== 2) continue;
 
-        // Skip duplicates
-        if (isset($seen[$eventSlug])) continue;
+        $away = trim($parts[0]);
+        $home = trim($parts[1]);
 
-        // Only include LIVE or UPCOMING games (skip REPLAY)
-        if (stripos($linkText, 'REPLAY') !== false) continue;
-        if (stripos($linkText, 'LIVE') === false && stripos($linkText, 'UPCOMING') === false) continue;
+        // Determine status from VideoStatus field
+        $videoStatus = $item['customFields']['VideoStatus'] ?? 'Scheduled';
+        $status = (strtolower($videoStatus) === 'live') ? 'LIVE' : 'UPCOMING';
 
-        // Determine status
-        $status = (stripos($linkText, 'LIVE') !== false) ? 'LIVE' : 'UPCOMING';
+        // Convert UTC start time to Eastern for the local date
+        $startDt = new DateTime($startUtc, new DateTimeZone('UTC'));
+        $startDt->setTimezone($et);
+        $localDate = $startDt->format('Y-m-d');
 
-        // Parse broadcast date from the link text
-        $broadcastDate = parseBroadcastDate($linkText);
+        // Build the watch URL from the path
+        $eventUrl = 'https://watch.sportsnet.ca' . $path;
 
-        // Parse teams from the URL slug (much more reliable than the link text)
-        $teams = parseSlugTeams($eventSlug, $SLUG_TEAMS);
-        if (!$teams) continue;
-
-        $eventUrl = 'https://watch.sportsnet.ca/event/' . $eventSlug;
-
-        $seen[$eventSlug] = true;
-        $game = [
-            'away' => $teams['away'],
-            'home' => $teams['home'],
+        $games[] = [
+            'away' => $away,
+            'home' => $home,
             'status' => $status,
+            'date' => $localDate,
             'url' => $eventUrl
         ];
-        if ($broadcastDate) {
-            $game['date'] = $broadcastDate;
-        }
-        $games[] = $game;
     }
 }
 

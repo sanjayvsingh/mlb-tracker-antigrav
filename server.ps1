@@ -274,7 +274,7 @@ try {
 
                 if (Test-Path $snCacheFile) {
                     $snLastWrite = (Get-Item $snCacheFile).LastWriteTime
-                    if ((Get-Date) - $snLastWrite -lt (New-TimeSpan -Hours 12)) {
+                    if ((Get-Date) - $snLastWrite -lt (New-TimeSpan -Hours 4)) {
                         $snCacheValid = $true
                     }
                 }
@@ -291,97 +291,80 @@ try {
                     $response.OutputStream.Write($snContent, 0, $snContent.Length)
                 } else {
                     try {
-                        Write-Host "Fetching Sportsnet MLB schedule..."
-                        $snUrl = "https://watch.sportsnet.ca/leagues/MLB_155233"
-                        $snHtml = Invoke-WebRequest -Uri $snUrl -UseBasicParsing -TimeoutSec 15 -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                        Write-Host "Fetching Sportsnet MLB schedule via API..."
+                        $snApiBase = "https://production-cdn.d3-rgr-diva.com/api"
+                        
+                        try {
+                            $snHomepage = Invoke-WebRequest -Uri "https://watch.sportsnet.ca/sportschedule" -UseBasicParsing -TimeoutSec 5 -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                            if ($snHomepage.Content -match "env\.CLIENT_SERVICE_CDN_URL='([^']+)'") {
+                                $snApiBase = $matches[1].TrimEnd('/')
+                            }
+                        } catch {
+                            Write-Host "Failed to dynamically discover API URL, using fallback."
+                        }
+                        
+                        $snApiBase = "$snApiBase/sportschedules?competition=cp-mlb"
 
-                        $snText = $snHtml.Content
-
-                        # Slug-to-team mapping (longest patterns first for greedy match)
-                        $slugTeams = [ordered]@{
-                            'New_York_Yankees' = 'New York Yankees'
-                            'New_York_Mets' = 'New York Mets'
-                            'Los_Angeles_Dodgers' = 'Los Angeles Dodgers'
-                            'Los_Angeles_Angels' = 'Los Angeles Angels'
-                            'Chicago_Cubs' = 'Chicago Cubs'
-                            'Chicago_White_Sox' = 'Chicago White Sox'
-                            'San_Francisco' = 'San Francisco'
-                            'San_Diego' = 'San Diego'
-                            'St_Louis' = 'St. Louis'
-                            'Tampa_Bay' = 'Tampa Bay'
-                            'Kansas_City' = 'Kansas City'
-                            'New_York' = 'New York'
-                            'Los_Angeles' = 'Los Angeles'
-                            'Cleveland' = 'Cleveland'
-                            'Toronto' = 'Toronto'
-                            'Boston' = 'Boston'
-                            'Houston' = 'Houston'
-                            'Baltimore' = 'Baltimore'
-                            'Detroit' = 'Detroit'
-                            'Minnesota' = 'Minnesota'
-                            'Seattle' = 'Seattle'
-                            'Texas' = 'Texas'
-                            'Oakland' = 'Oakland'
-                            'Atlanta' = 'Atlanta'
-                            'Miami' = 'Miami'
-                            'Philadelphia' = 'Philadelphia'
-                            'Washington' = 'Washington'
-                            'Cincinnati' = 'Cincinnati'
-                            'Milwaukee' = 'Milwaukee'
-                            'Pittsburgh' = 'Pittsburgh'
-                            'Arizona' = 'Arizona'
-                            'Colorado' = 'Colorado'
+                        # Fetch today through day+3 to cover 3-day ET window
+                        # (a game at 11 PM ET on day X is filed as day X+1 in UTC)
+                        $snToday = Get-Date
+                        $snDates = @()
+                        for ($d = 0; $d -le 3; $d++) {
+                            $snDates += $snToday.AddDays($d).ToString('yyyy-MM-dd')
                         }
 
                         $snGames = @()
-                        $snSeen = @{}
+                        $snSeenIds = @{}
 
-                        # Extract event URLs and their surrounding text
-                        $eventMatches = [regex]::Matches($snText, '<a[^>]*href="([^"]*?/event/([^"]+))"[^>]*>(.*?)</a>', [System.Text.RegularExpressions.RegexOptions]::Singleline)
-                        
-                        foreach ($em in $eventMatches) {
-                            $eventSlug = $em.Groups[2].Value
-                            $linkText = $em.Groups[3].Value -replace '<[^>]+>', ''
-                            
-                            # Skip duplicates and replays
-                            if ($snSeen.ContainsKey($eventSlug)) { continue }
-                            if ($linkText -match 'REPLAY') { continue }
-                            if ($linkText -notmatch '(LIVE|UPCOMING)') { continue }
-
-                            $snStatus = "UPCOMING"
-                            if ($linkText -match 'LIVE') { $snStatus = "LIVE" }
-
-                            # Parse teams from slug (e.g. "Cleveland_Toronto_212498")
-                            $slugClean = $eventSlug -replace '_\d+$', ''
-                            
-                            $snAway = $null
-                            $remaining = $slugClean
-                            foreach ($pattern in $slugTeams.Keys) {
-                                if ($remaining.StartsWith($pattern)) {
-                                    $snAway = $slugTeams[$pattern]
-                                    $remaining = $remaining.Substring($pattern.Length).TrimStart('_')
-                                    break
-                                }
+                        foreach ($dateStr in $snDates) {
+                            $snUrl = "$snApiBase&date=$dateStr&page_size=50"
+                            try {
+                                $snResp = Invoke-RestMethod -Uri $snUrl -UseBasicParsing -TimeoutSec 10 -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                            } catch {
+                                Write-Host "  Sportsnet API failed for $dateStr`: $($_.Exception.Message)"
+                                continue
                             }
-                            
-                            $snHome = $null
-                            if ($snAway -and $remaining) {
-                                foreach ($pattern in $slugTeams.Keys) {
-                                    if ($remaining -eq $pattern) {
-                                        $snHome = $slugTeams[$pattern]
-                                        break
-                                    }
-                                }
-                            }
-                            
-                            if (-not $snAway -or -not $snHome) { continue }
 
-                            $snSeen[$eventSlug] = $true
-                            $snGames += @{
-                                away = $snAway
-                                home = $snHome
-                                status = $snStatus
-                                url = "https://watch.sportsnet.ca/event/$eventSlug"
+                            if (-not $snResp.items) { continue }
+
+                            foreach ($item in $snResp.items) {
+                                if ($item.type -ne 'event') { continue }
+                                $itemId = $item.id
+                                if ($snSeenIds.ContainsKey($itemId)) { continue }
+                                $snSeenIds[$itemId] = $true
+
+                                $title = $item.title
+                                $path = $item.path
+                                $startUtc = $item.eventStartDate
+
+                                if (-not $title -or -not $startUtc) { continue }
+
+                                # Parse teams from title (e.g., "Toronto @ Tampa Bay")
+                                $teamParts = $title -split '\s+@\s+', 2
+                                if ($teamParts.Count -ne 2) { continue }
+
+                                $snAway = $teamParts[0].Trim()
+                                $snHome = $teamParts[1].Trim()
+
+                                # Determine status
+                                $videoStatus = $item.customFields.VideoStatus
+                                $snStatus = if ($videoStatus -eq 'Live') { 'LIVE' } else { 'UPCOMING' }
+
+                                # Convert UTC start time to Eastern for local date
+                                $utcDt = [DateTime]::Parse($startUtc, $null, [System.Globalization.DateTimeStyles]::RoundtripKind)
+                                $etZone = [TimeZoneInfo]::FindSystemTimeZoneById('Eastern Standard Time')
+                                $etDt = [TimeZoneInfo]::ConvertTimeFromUtc($utcDt, $etZone)
+                                $localDate = $etDt.ToString('yyyy-MM-dd')
+
+                                $eventUrl = "https://watch.sportsnet.ca$path"
+
+                                $snGames += @{
+                                    away = $snAway
+                                    home = $snHome
+                                    status = $snStatus
+                                    date = $localDate
+                                    url = $eventUrl
+                                }
                             }
                         }
 
@@ -394,7 +377,7 @@ try {
                         $snBytes = [System.Text.Encoding]::UTF8.GetBytes($snJson)
                         $response.ContentLength64 = $snBytes.Length
                         $response.OutputStream.Write($snBytes, 0, $snBytes.Length)
-                        Write-Host "Sportsnet: Found $($snGames.Count) games"
+                        Write-Host "Sportsnet: Found $($snGames.Count) games across $($snDates.Count) days"
                     } catch {
                         Write-Host "Sportsnet fetch failed: $($_.Exception.Message)"
                         $snError = '{"error":"Failed to fetch Sportsnet schedule","details":"' + ($_.Exception.Message -replace '"', "'") + '"}'
