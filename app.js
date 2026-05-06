@@ -138,6 +138,7 @@ async function loadEverything() {
 
         // Phase 2.5: Apply Sportsnet featured broadcasts (non-blocking)
         fetchSportsnetGames(); // No await — runs in background
+        fetchMlbNetworkGames(); // No await — runs in background
 
         // Phase 3: Fire Gemini in background (needs all enrichment data for prompt)
         const allGames = [...(gamesData.today || []), ...(gamesData.tomorrow || []), ...(gamesData.dayafter || [])];
@@ -1154,6 +1155,70 @@ async function fetchSportsnetGames() {
         }
     } catch (e) {
         console.warn('Sportsnet integration skipped:', e);
+    }
+}
+async function fetchMlbNetworkGames() {
+    try {
+        const res = await fetch('mlbnetwork.php', {
+            headers: { 'X-App-Token': 'mlb-tracker-v2' }
+        });
+        if (!res.ok) {
+            console.warn('MLB Network fetch failed:', res.status);
+            return;
+        }
+        const data = await res.json();
+        if (data.from_cache) {
+            console.log('[MLB Network] Loaded from cache');
+        }
+        if (!data.games || data.games.length === 0) {
+            console.log('[MLB Network] No games found');
+            return;
+        }
+
+        console.log(`[MLB Network] ${data.games.length} broadcasts available`);
+
+        const allSchedule = [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter];
+        let matched = 0;
+        const claimedIds = new Set(); // Track games already matched to avoid duplicates
+
+        data.games.forEach(mlbnGame => {
+            const awayNick = sportsnetToNickname(mlbnGame.away);
+            const homeNick = sportsnetToNickname(mlbnGame.home);
+            if (!awayNick || !homeNick) {
+                console.warn(`[MLB Network] Could not map: ${mlbnGame.away} @ ${mlbnGame.home}`);
+                return;
+            }
+
+            // Find an unclaimed matching game in the schedule
+            const match = allSchedule.find(g => {
+                if (claimedIds.has(g.id)) return false;
+                const gAway = g.away.nickname;
+                const gHome = g.home.nickname;
+                if (gAway !== awayNick || gHome !== homeNick) return false;
+                // If the MLB Network broadcast has a date, only match games on that date
+                if (mlbnGame.date) {
+                    const gameDate = getLocalDateString(g.date);
+                    if (gameDate !== mlbnGame.date) return false;
+                }
+                return true;
+            });
+
+            if (match) {
+                claimedIds.add(match.id);
+                // Add MLB Network to featured networks if not already there
+                if (!match.featuredNetworks.includes('MLB Network')) {
+                    match.featuredNetworks.push('MLB Network');
+                    matched++;
+                }
+            }
+        });
+
+        if (matched > 0) {
+            console.log(`[MLB Network] Matched ${matched} games in 3-day window`);
+            renderGames();
+        }
+    } catch (e) {
+        console.warn('MLB Network integration skipped:', e);
     }
 }
 

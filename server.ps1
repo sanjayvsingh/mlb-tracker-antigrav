@@ -390,6 +390,111 @@ try {
                 $response.Close()
                 continue
             }
+            
+            # MLB Network scraper endpoint
+            if ($localPath -eq 'mlbnetwork.php' -and $context.Request.HttpMethod -eq 'GET') {
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8080|http://127.0.0.1:8080|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                
+                $appToken = $context.Request.Headers["X-App-Token"]
+                if ($appToken -ne "mlb-tracker-v2") {
+                    $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error": "Forbidden. Invalid or missing App Token."}')
+                    $response.StatusCode = 403
+                    $response.ContentType = "application/json"
+                    $response.ContentLength64 = $errorBytes.Length
+                    $response.OutputStream.Write($errorBytes, 0, $errorBytes.Length)
+                    $response.Close()
+                    continue
+                }
+
+                $response.ContentType = "application/json"
+
+                $mlbnCacheFile = Join-Path $PSScriptRoot "mlbnetwork_cache.json"
+                $mlbnCacheValid = $false
+
+                if (Test-Path $mlbnCacheFile) {
+                    $mlbnLastWrite = (Get-Item $mlbnCacheFile).LastWriteTime
+                    if ((Get-Date) - $mlbnLastWrite -lt (New-TimeSpan -Hours 24)) {
+                        $mlbnCacheValid = $true
+                    }
+                }
+
+                if ($mlbnCacheValid) {
+                    $mlbnContent = [System.IO.File]::ReadAllBytes($mlbnCacheFile)
+                    try {
+                        $mlbnStr = [System.Text.Encoding]::UTF8.GetString($mlbnContent)
+                        $mlbnObj = ConvertFrom-Json $mlbnStr
+                        $mlbnObj | Add-Member -MemberType NoteProperty -Name "from_cache" -Value $true -Force
+                        $mlbnContent = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $mlbnObj -Depth 5 -Compress))
+                    } catch {}
+                    $response.ContentLength64 = $mlbnContent.Length
+                    $response.OutputStream.Write($mlbnContent, 0, $mlbnContent.Length)
+                } else {
+                    try {
+                        Write-Host "Fetching MLB Network schedule..."
+                        $mlbnUrl = "https://www.mlb.com/network/modules/shows/mlbn-live-games"
+                        $mlbnHtml = Invoke-WebRequest -Uri $mlbnUrl -UseBasicParsing -TimeoutSec 10 -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+                        
+                        $mlbnGames = @()
+                        
+                        $pattern = '(?s)<tr[^>]*>\s*<td[^>]*>([^<]+)</td>\s*<td[^>]*>([^<]+)</td>\s*<td[^>]*>.*?<div[^>]*>([^<]+)</div>'
+                        $htmlMatches = [regex]::Matches($mlbnHtml.Content, $pattern)
+                        
+                        foreach ($m in $htmlMatches) {
+                            $dateStr = $m.Groups[1].Value.Trim()
+                            $timeStr = $m.Groups[2].Value.Trim()
+                            $desc = $m.Groups[3].Value.Trim()
+                            
+                            try {
+                                $dtObj = [datetime]::ParseExact($dateStr, 'MM/dd/yyyy', $null)
+                                $formattedDate = $dtObj.ToString('yyyy-MM-dd')
+                            } catch {
+                                continue
+                            }
+                            
+                            $status = "UPCOMING"
+                            if ($desc -match '\[LIVE\]') {
+                                $status = "LIVE"
+                            }
+                            
+                            $segments = $desc -split ' or '
+                            foreach ($seg in $segments) {
+                                $clean = $seg -replace '(?i)( from | on |\s*\(|\s*\[).*', ''
+                                $mTeams = [regex]::Match($clean, '(?i)(.+?)\s+(?:at|@)\s+(.+)')
+                                if ($mTeams.Success) {
+                                    $mlbnGames += @{
+                                        away = $mTeams.Groups[1].Value.Trim()
+                                        home = $mTeams.Groups[2].Value.Trim()
+                                        date = $formattedDate
+                                        time = $timeStr
+                                        status = $status
+                                    }
+                                }
+                            }
+                        }
+
+                        $mlbnResult = @{ games = $mlbnGames; from_cache = $false }
+                        $mlbnJson = ConvertTo-Json $mlbnResult -Depth 5 -Compress
+                        
+                        [System.IO.File]::WriteAllText($mlbnCacheFile, $mlbnJson, [System.Text.Encoding]::UTF8)
+                        
+                        $mlbnBytes = [System.Text.Encoding]::UTF8.GetBytes($mlbnJson)
+                        $response.ContentLength64 = $mlbnBytes.Length
+                        $response.OutputStream.Write($mlbnBytes, 0, $mlbnBytes.Length)
+                        Write-Host "MLB Network: Found $($mlbnGames.Count) games"
+                    } catch {
+                        Write-Host "MLB Network fetch failed: $($_.Exception.Message)"
+                        $mlbnErrorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Failed to fetch MLB Network schedule"}')
+                        $response.StatusCode = 502
+                        $response.ContentLength64 = $mlbnErrorBytes.Length
+                        $response.OutputStream.Write($mlbnErrorBytes, 0, $mlbnErrorBytes.Length)
+                    }
+                }
+                $response.Close()
+                continue
+            }
 
             $filePath = Join-Path $PSScriptRoot $localPath
             
