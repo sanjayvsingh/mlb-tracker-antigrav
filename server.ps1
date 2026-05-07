@@ -36,17 +36,6 @@ try {
                     $response.AddHeader("Access-Control-Allow-Origin", $origin)
                 }
                 
-                $appToken = $context.Request.Headers["X-App-Token"]
-                if ($appToken -ne "mlb-tracker-v2") {
-                    $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error": "Forbidden. Invalid or missing App Token."}')
-                    $response.StatusCode = 403
-                    $response.ContentType = "application/json"
-                    $response.ContentLength64 = $errorBytes.Length
-                    $response.OutputStream.Write($errorBytes, 0, $errorBytes.Length)
-                    $response.Close()
-                    continue
-                }
-
                 $response.ContentType = "application/json"
                 $cacheValid = $false
                 
@@ -256,17 +245,6 @@ try {
                     $response.AddHeader("Access-Control-Allow-Origin", $origin)
                 }
                 
-                $appToken = $context.Request.Headers["X-App-Token"]
-                if ($appToken -ne "mlb-tracker-v2") {
-                    $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error": "Forbidden. Invalid or missing App Token."}')
-                    $response.StatusCode = 403
-                    $response.ContentType = "application/json"
-                    $response.ContentLength64 = $errorBytes.Length
-                    $response.OutputStream.Write($errorBytes, 0, $errorBytes.Length)
-                    $response.Close()
-                    continue
-                }
-
                 $response.ContentType = "application/json"
 
                 $snCacheFile = Join-Path $PSScriptRoot "sportsnet_cache.json"
@@ -398,17 +376,6 @@ try {
                     $response.AddHeader("Access-Control-Allow-Origin", $origin)
                 }
                 
-                $appToken = $context.Request.Headers["X-App-Token"]
-                if ($appToken -ne "mlb-tracker-v2") {
-                    $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error": "Forbidden. Invalid or missing App Token."}')
-                    $response.StatusCode = 403
-                    $response.ContentType = "application/json"
-                    $response.ContentLength64 = $errorBytes.Length
-                    $response.OutputStream.Write($errorBytes, 0, $errorBytes.Length)
-                    $response.Close()
-                    continue
-                }
-
                 $response.ContentType = "application/json"
 
                 $mlbnCacheFile = Join-Path $PSScriptRoot "mlbnetwork_cache.json"

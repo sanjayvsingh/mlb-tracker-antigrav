@@ -4,6 +4,8 @@
  * Caches results for 24 hours.
  */
 
+require_once 'token.php';
+
 header('Content-Type: application/json');
 
 // Access Control Setup
@@ -18,7 +20,7 @@ $origin = isset($_SERVER['HTTP_ORIGIN']) ? $_SERVER['HTTP_ORIGIN'] : '';
 if (in_array($origin, $allowed_origins)) {
     header("Access-Control-Allow-Origin: " . $origin);
     header("Access-Control-Allow-Methods: GET, OPTIONS");
-    header("Access-Control-Allow-Headers: Content-Type, X-App-Token");
+    header("Access-Control-Allow-Headers: Content-Type, X-CSRF-Token");
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -26,19 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// Access Control: Require Custom App Token
-$appToken = isset($_SERVER['HTTP_X_APP_TOKEN']) ? $_SERVER['HTTP_X_APP_TOKEN'] : '';
-if (function_exists('getallheaders')) {
-    $headers = getallheaders();
-    if (isset($headers['X-App-Token'])) $appToken = $headers['X-App-Token'];
-    elseif (isset($headers['x-app-token'])) $appToken = $headers['x-app-token'];
-}
-
-if ($appToken !== 'mlb-tracker-v2') {
-    http_response_code(403);
-    echo json_encode(["error" => "Forbidden. Invalid or missing App Token."]);
-    exit;
-}
+csrf_verify();
 
 $cacheFile = 'mlbnetwork_cache.json';
 $cacheTTL = 24 * 60 * 60; // 24 hours in seconds

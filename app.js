@@ -949,9 +949,9 @@ async function applyGeminiRecommendations(gamesList) {
     try {
         const res = await fetch('gemini.php', {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Content-Type': 'application/json',
-                'X-App-Token': 'mlb-tracker-v2'
+                'X-CSRF-Token': window.CSRF_TOKEN
             },
             body: JSON.stringify(payload)
         });
@@ -1094,7 +1094,7 @@ async function fetchSportsnetGames() {
         }
 
         const res = await fetch('sportsnet.php', {
-            headers: { 'X-App-Token': 'mlb-tracker-v2' }
+            headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
         });
         if (!res.ok) {
             console.warn('Sportsnet fetch failed:', res.status);
@@ -1162,7 +1162,7 @@ async function fetchSportsnetGames() {
 async function fetchMlbNetworkGames() {
     try {
         const res = await fetch('mlbnetwork.php', {
-            headers: { 'X-App-Token': 'mlb-tracker-v2' }
+            headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
         });
         if (!res.ok) {
             console.warn('MLB Network fetch failed:', res.status);
