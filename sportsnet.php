@@ -100,9 +100,11 @@ $games = [];
 $seen = [];
 $et = new DateTimeZone('America/Toronto');
 
+// Build all handles and fire them in parallel
+$multiHandle = curl_multi_init();
+$handles = [];
 foreach ($dates as $dateStr) {
     $url = $apiBase . '&date=' . $dateStr . '&page_size=50';
-
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -110,8 +112,21 @@ foreach ($dates as $dateStr) {
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 10);
     curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
-    $body = curl_exec($ch);
+    curl_multi_add_handle($multiHandle, $ch);
+    $handles[$dateStr] = $ch;
+}
+
+$running = null;
+do {
+    curl_multi_exec($multiHandle, $running);
+    curl_multi_select($multiHandle);
+} while ($running > 0);
+
+foreach ($dates as $dateStr) {
+    $ch = $handles[$dateStr];
+    $body = curl_multi_getcontent($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_multi_remove_handle($multiHandle, $ch);
     curl_close($ch);
 
     if ($httpCode !== 200 || !$body) continue;
@@ -160,6 +175,8 @@ foreach ($dates as $dateStr) {
         ];
     }
 }
+
+curl_multi_close($multiHandle);
 
 $result = ['games' => $games, 'from_cache' => false];
 

@@ -1074,21 +1074,23 @@ function sportsnetToNickname(snName) {
 
 async function fetchSportsnetGames() {
     try {
-        // Only show Sportsnet broadcasts for Canadian users
+        // Only show Sportsnet broadcasts for confirmed Canadian users
         try {
             const geoRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) });
-            if (geoRes.ok) {
-                const geo = await geoRes.json();
-                const country = geo.country_code || geo.country || 'unknown';
-                console.log(`[Sportsnet] User detected in ${geo.country_name || country}`);
-                if (country !== 'CA') {
-                    console.log('[Sportsnet] Skipping — Sportsnet broadcasts are Canada-only');
-                    return;
-                }
+            if (!geoRes.ok) {
+                console.warn('[Sportsnet] Geo-detection request failed, skipping');
+                return;
+            }
+            const geo = await geoRes.json();
+            const country = geo.country_code || geo.country || 'unknown';
+            console.log(`[Sportsnet] User detected in ${geo.country_name || country}`);
+            if (country !== 'CA') {
+                console.log('[Sportsnet] Skipping — Sportsnet broadcasts are Canada-only');
+                return;
             }
         } catch (geoErr) {
-            // If geo-detection fails, proceed anyway (fail-open)
-            console.warn('[Sportsnet] Geo-detection failed, proceeding:', geoErr.message);
+            console.warn('[Sportsnet] Geo-detection failed, skipping:', geoErr.message);
+            return;
         }
 
         const res = await fetch('sportsnet.php', {
