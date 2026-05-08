@@ -65,6 +65,8 @@ The backend proxy scripts include several layers of security to prevent unauthor
 - **Secure Session Cookies**: PHP sessions use `secure`, `httponly`, and `SameSite=Lax` cookie parameters. `Lax` (rather than `Strict`) is used so that shared links work correctly on first click from an external page.
 - **Origin Validation**: All proxy scripts validate the `Origin` header and only set CORS headers for `mlb.sanvash.com` or local development environments.
 - **Geo-Gated Sportsnet**: Sportsnet broadcasts are only surfaced to confirmed Canadian users. The geo-check is fail-closed — if the detection request fails for any reason, Sportsnet is skipped entirely.
+- **HTTP Security Headers** (via `.htaccess`): `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, `Referrer-Policy`, and `Content-Security-Policy` are set on every response. Direct HTTP access to cache `.json` files is also blocked at the Apache layer.
+- **Stale Cache Fallback**: If an external API call fails on a cold server load, all three proxy endpoints (`gemini.php`, `sportsnet.php`, `mlbnetwork.php`) automatically fall back to the most recent cached response rather than returning an error. The client logs a `console.warn` when stale data is being served.
 
 ## 🎯 Goal
 

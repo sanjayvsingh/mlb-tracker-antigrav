@@ -968,7 +968,9 @@ async function applyGeminiRecommendations(gamesList) {
         const data = JSON.parse(cleanText);
         
         if (data && data.games) {
-            if (data.from_cache) {
+            if (data.stale) {
+                console.warn('[Gemini Proxy] Serving stale cache — API call failed.');
+            } else if (data.from_cache) {
                 console.log(`[Gemini Proxy] Results loaded from cache.`);
             }
             if (data.model_used) {
@@ -1101,7 +1103,9 @@ async function fetchSportsnetGames() {
             return;
         }
         const data = await res.json();
-        if (data.from_cache) {
+        if (data.stale) {
+            console.warn('[Sportsnet] Serving stale cache — API call failed.');
+        } else if (data.from_cache) {
             console.log('[Sportsnet] Loaded from cache');
         }
         if (!data.games || data.games.length === 0) {
@@ -1169,7 +1173,9 @@ async function fetchMlbNetworkGames() {
             return;
         }
         const data = await res.json();
-        if (data.from_cache) {
+        if (data.stale) {
+            console.warn('[MLB Network] Serving stale cache — API call failed.');
+        } else if (data.from_cache) {
             console.log('[MLB Network] Loaded from cache');
         }
         if (!data.games || data.games.length === 0) {

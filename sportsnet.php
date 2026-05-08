@@ -168,10 +168,19 @@ foreach ($dates as $dateStr) {
 
 curl_multi_close($multiHandle);
 
-$result = ['games' => $games, 'from_cache' => false];
-
-// Cache the result
-file_put_contents($cacheFile, json_encode($result));
-
-echo json_encode($result);
+if (!empty($games)) {
+    $result = ['games' => $games, 'from_cache' => false];
+    file_put_contents($cacheFile, json_encode($result));
+    echo json_encode($result);
+} else {
+    // Fresh fetch returned nothing — serve stale cache rather than an empty response
+    $stale = file_exists($cacheFile) ? json_decode(file_get_contents($cacheFile), true) : null;
+    if ($stale && !empty($stale['games'])) {
+        $stale['from_cache'] = true;
+        $stale['stale'] = true;
+        echo json_encode($stale);
+    } else {
+        echo json_encode(['games' => [], 'from_cache' => false]);
+    }
+}
 ?>

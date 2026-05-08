@@ -86,6 +86,12 @@ if ($cacheValid) {
     exit;
 }
 
+// Load stale cache now so we can fall back to it if the API call fails
+$staleGemini = null;
+if (file_exists($cacheFile)) {
+    $staleGemini = json_decode(file_get_contents($cacheFile), true);
+}
+
 // If no valid cache, construct prompt and call Gemini API
 $teamContext = isset($input['teamContext']) ? $input['teamContext'] : [];
 
@@ -234,12 +240,18 @@ if ($httpcode == 200) {
         ]);
     }
 } else {
-    http_response_code($httpcode ?: 500);
-    echo json_encode([
-        "error" => "Gemini API call failed",
-        "details" => $response,
-        "curl_error" => $curlError,
-        "http_code" => $httpcode
-    ]);
+    if ($staleGemini) {
+        $staleGemini['from_cache'] = true;
+        $staleGemini['stale'] = true;
+        echo json_encode($staleGemini);
+    } else {
+        http_response_code($httpcode ?: 500);
+        echo json_encode([
+            "error" => "Gemini API call failed",
+            "details" => $response,
+            "curl_error" => $curlError,
+            "http_code" => $httpcode
+        ]);
+    }
 }
 ?>
