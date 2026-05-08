@@ -46,15 +46,18 @@ if (file_exists($cacheFile)) {
 }
 
 $url = 'https://www.mlb.com/network/modules/shows/mlbn-live-games';
-$html = @file_get_contents($url, false, stream_context_create([
-    'http' => [
-        'method' => 'GET',
-        'header' => 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'timeout' => 10
-    ]
-]));
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL, $url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+$html = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
 
-if (!$html) {
+if (!$html || $httpCode !== 200) {
     http_response_code(502);
     echo json_encode(["error" => "Failed to fetch MLB Network schedule"]);
     exit;
