@@ -44,7 +44,18 @@ if (file_exists($cacheFile)) {
     }
 }
 
-$sheetId  = getenv('SHEET_ID');
+if (file_exists('sheet_id.php')) {
+    $sheetId = require 'sheet_id.php';
+} else {
+    $sheetId = getenv('SHEET_ID');
+}
+
+if (!$sheetId) {
+    http_response_code(500);
+    echo json_encode(['error' => 'Sheet ID not configured']);
+    exit;
+}
+
 $sheetUrl = "https://docs.google.com/spreadsheets/d/{$sheetId}/export?format=csv";
 
 $ch = curl_init();
