@@ -2,7 +2,6 @@
  * MLB Tracker V2 - Client Side Logic
  */
 
-const SHEET_URL = "https://docs.google.com/spreadsheets/d/1XTmkD-ms9UpE2KVNgp7eEOszJ5MX8oq_rUZ2tyuSlqI/export?format=csv";
 const STATS_API_BASE = "https://statsapi.mlb.com/api/v1";
 
 const MLB_OFFICIAL_NAMES = new Set([
@@ -280,34 +279,24 @@ function setupListeners() {
 /// 1. Google Sheet Fetcher Helper
 async function fetchGoogleSheet() {
     try {
-        const res = await fetch(SHEET_URL);
+        const res = await fetch('sheet.php', {
+            headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
+        });
         if (!res.ok) {
             console.warn("Sheet fetch failed (Status: " + res.status + ")");
             myUnseenTeams = [...MLB_OFFICIAL_NAMES];
             return;
         }
-        const csv = await res.text();
-        const lines = csv.split('\n').filter(l => l.trim().length > 0);
-        lines.shift(); // shift header
-        
-        myUnseenTeams = [];
-        for (const line of lines) {
-            const cols = [];
-            let cur = '';
-            let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-                if (line[i] === '"') inQuotes = !inQuotes;
-                else if (line[i] === ',' && !inQuotes) { cols.push(cur); cur = ''; }
-                else cur += line[i];
-            }
-            cols.push(cur);
-            if (cols.length > 13 && cols[13].trim()) {
-                myUnseenTeams.push(cols[13].trim());
-            }
+        const data = await res.json();
+        if (data.stale) {
+            console.warn('[Sheet] Serving stale cache — fetch failed.');
+        } else if (data.from_cache) {
+            console.log('[Sheet] Loaded from cache.');
         }
+        myUnseenTeams = data.teams || [...MLB_OFFICIAL_NAMES];
     } catch (e) {
         console.error("Failed to load spreadsheet.", e);
-        myUnseenTeams = [...MLB_OFFICIAL_NAMES]; 
+        myUnseenTeams = [...MLB_OFFICIAL_NAMES];
     }
 }
 
