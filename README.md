@@ -35,7 +35,10 @@ The application integrates data from multiple real-time sources to calculate the
   - `gemini-3.1-flash-lite-preview`: Serves as an automatic fallback if the primary model reaches its rate limit (429) or is unavailable (503). Also used automatically when `debugDate` is set to conserve quota during testing.
 
 - **Sportsnet Scraping API**:
-  - `sportsnet.php`: A backend scraper that parses live and upcoming MLB matchups from Sportsnet's watch page. Includes a lightweight geo-IP check so that badges are only shown to users located in Canada. Caches results locally for 12 hours.
+  - `sportsnet.php`: A backend scraper that parses live and upcoming MLB matchups from Sportsnet's internal schedule API. Includes a geo-IP check so that badges are only shown to confirmed Canadian users (fails closed — Sportsnet is skipped if geo-detection is unavailable). Fetches up to 4 dates in parallel using `curl_multi` and caches results for 4 hours.
+
+- **MLB Network Scraping**:
+  - `mlbnetwork.php`: A backend scraper that fetches and parses the MLB Network live games schedule from `mlb.com`. Extracts game matchups, dates, and times and caches results for 24 hours. Games broadcast on MLB Network are surfaced as Featured Broadcasts in the UI.
 
 ## 🔗 URL Parameters
 
@@ -50,17 +53,18 @@ You can customize the application state using the following parameters:
 ## 🛠️ Tech Stack
 
 - **Frontend**: Vanilla HTML5, JavaScript (ES6+), CSS3.
-- **Backend Proxy**: PHP (for secure AI API requests) and PowerShell (`server.ps1` for local development).
+- **Backend Proxy**: PHP (`index.php` for session/CSRF token seeding; `gemini.php`, `sportsnet.php`, `mlbnetwork.php` for proxying external APIs; `token.php` as a shared auth helper). PowerShell (`server.ps1`) for local development.
 - **Data Source**: MLB Stats API, Google Gemini API.
 - **Icons**: [Material Icons](https://fonts.google.com/icons)
 
 ## 🔒 Security
 
-The backend proxy scripts (`gemini.php` and `sportsnet.php`) include several layers of security to prevent unauthorized usage and quota abuse:
+The backend proxy scripts include several layers of security to prevent unauthorized usage and quota abuse:
 
-- **Origin Validation**: Both scripts strictly validate the `Origin` and `Referer` headers. Only requests from `mlb.sanvash.com` or local development environments are processed.
-- **Custom Header Challenge**: Every request from the frontend must include a custom `X-App-Token` header. Requests missing this token or using an incorrect one are instantly rejected with a `403 Forbidden` response.
-- **Local Server Protection**: The `server.ps1` local testing script also enforces these same origin and token checks, and has wildcard CORS disabled for improved security.
+- **Session-Based CSRF Tokens**: `index.php` generates a cryptographically random token per PHP session and injects it into the page as `window.CSRF_TOKEN`. Every request to a proxy endpoint must include this token in the `X-CSRF-Token` header, verified server-side with `hash_equals()`. Unlike a hardcoded static token, this cannot be replayed without a valid session cookie.
+- **Secure Session Cookies**: PHP sessions use `secure`, `httponly`, and `SameSite=Lax` cookie parameters. `Lax` (rather than `Strict`) is used so that shared links work correctly on first click from an external page.
+- **Origin Validation**: All proxy scripts validate the `Origin` header and only set CORS headers for `mlb.sanvash.com` or local development environments.
+- **Geo-Gated Sportsnet**: Sportsnet broadcasts are only surfaced to confirmed Canadian users. The geo-check is fail-closed — if the detection request fails for any reason, Sportsnet is skipped entirely.
 
 ## 🎯 Goal
 
