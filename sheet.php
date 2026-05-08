@@ -64,9 +64,8 @@ curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
 curl_setopt($ch, CURLOPT_TIMEOUT,        10);
-$csv       = curl_exec($ch);
-$httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$curlError = curl_error($ch);
+$csv      = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
 if (!$csv || $httpCode !== 200) {
@@ -77,12 +76,7 @@ if (!$csv || $httpCode !== 200) {
         echo json_encode($stale);
     } else {
         http_response_code(502);
-        echo json_encode([
-            'error'      => 'Failed to fetch sheet',
-            'http_code'  => $httpCode,
-            'curl_error' => $curlError,
-            'sheet_id'   => substr($sheetId, 0, 8) . '...',
-        ]);
+        echo json_encode(['error' => 'Failed to fetch sheet']);
     }
     exit;
 }
