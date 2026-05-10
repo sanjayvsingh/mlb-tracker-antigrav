@@ -82,7 +82,7 @@ async function fetchJSONWithCache(url, ttlMs) {
 }
 
 // State
-let myUnseenTeams = [...MLB_OFFICIAL_NAMES]; 
+let myUnseenTeams = [...MLB_OFFICIAL_NAMES];
 let allTeamsDetailed = []; // From standings
 let standingsData = null; // Store raw standings for record and rank
 let gamesData = { today: [], tomorrow: [], dayafter: [] };
@@ -90,6 +90,7 @@ let activeTab = 'today';
 let filters = { bothUnseen: false, featured: false, electric: false, funGames: false, showcase: false };
 let hotHitters = new Map();     // team nickname -> [{name, stat}]
 let milestoneWatch = new Map(); // team nickname -> [{name, description}]
+let cachedCountry = null;       // Result of geo-detection, shared across Canadian broadcaster fetches
 
 // DOM Maps
 const dom = {
@@ -135,8 +136,9 @@ async function loadEverything() {
         renderMetrics();
         renderGames();
 
-        // Phase 2.5: Apply Sportsnet featured broadcasts (non-blocking)
+        // Phase 2.5: Apply Canadian and MLB Network featured broadcasts (non-blocking)
         fetchSportsnetGames(); // No await — runs in background
+        fetchTsnGames();       // No await — runs in background
         fetchMlbNetworkGames(); // No await — runs in background
 
         // Phase 3: Fire Gemini in background (needs all enrichment data for prompt)
@@ -1063,24 +1065,26 @@ function sportsnetToNickname(snName) {
     return null;
 }
 
+async function detectCanada() {
+    if (cachedCountry !== null) return cachedCountry === 'CA';
+    try {
+        const geoRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) });
+        if (!geoRes.ok) { cachedCountry = ''; return false; }
+        const geo = await geoRes.json();
+        cachedCountry = geo.country_code || geo.country || '';
+        console.log(`[Geo] User detected in ${geo.country_name || cachedCountry}`);
+        return cachedCountry === 'CA';
+    } catch (e) {
+        cachedCountry = '';
+        console.warn('[Geo] Detection failed:', e.message);
+        return false;
+    }
+}
+
 async function fetchSportsnetGames() {
     try {
-        // Only show Sportsnet broadcasts for confirmed Canadian users
-        try {
-            const geoRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) });
-            if (!geoRes.ok) {
-                console.warn('[Sportsnet] Geo-detection request failed, skipping');
-                return;
-            }
-            const geo = await geoRes.json();
-            const country = geo.country_code || geo.country || 'unknown';
-            console.log(`[Sportsnet] User detected in ${geo.country_name || country}`);
-            if (country !== 'CA') {
-                console.log('[Sportsnet] Skipping — Sportsnet broadcasts are Canada-only');
-                return;
-            }
-        } catch (geoErr) {
-            console.warn('[Sportsnet] Geo-detection failed, skipping:', geoErr.message);
+        if (!(await detectCanada())) {
+            console.log('[Sportsnet] Skipping — Sportsnet broadcasts are Canada-only');
             return;
         }
 
@@ -1152,6 +1156,72 @@ async function fetchSportsnetGames() {
         console.warn('Sportsnet integration skipped:', e);
     }
 }
+async function fetchTsnGames() {
+    try {
+        if (!(await detectCanada())) {
+            console.log('[TSN] Skipping — TSN broadcasts are Canada-only');
+            return;
+        }
+
+        const res = await fetch('tsn.php', {
+            headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
+        });
+        if (!res.ok) {
+            console.warn('[TSN] Fetch failed:', res.status);
+            return;
+        }
+        const data = await res.json();
+        if (data.stale) {
+            console.warn('[TSN] Serving stale cache — fetch failed.');
+        } else if (data.from_cache) {
+            console.log('[TSN] Loaded from cache');
+        }
+        if (!data.games || data.games.length === 0) {
+            console.log('[TSN] No games found');
+            return;
+        }
+
+        console.log(`[TSN] ${data.games.length} broadcasts available`);
+
+        const allSchedule = [...gamesData.today, ...gamesData.tomorrow, ...gamesData.dayafter];
+        let matched = 0;
+        const claimedIds = new Set();
+
+        data.games.forEach(tsnGame => {
+            const awayNick = sportsnetToNickname(tsnGame.away);
+            const homeNick = sportsnetToNickname(tsnGame.home);
+            if (!awayNick || !homeNick) {
+                console.warn(`[TSN] Could not map: ${tsnGame.away} @ ${tsnGame.home}`);
+                return;
+            }
+
+            const match = allSchedule.find(g => {
+                if (claimedIds.has(g.id)) return false;
+                if (g.away.nickname !== awayNick || g.home.nickname !== homeNick) return false;
+                if (tsnGame.date) {
+                    return getLocalDateString(g.date) === tsnGame.date;
+                }
+                return true;
+            });
+
+            if (match) {
+                claimedIds.add(match.id);
+                if (!match.featuredNetworks.includes('TSN')) {
+                    match.featuredNetworks.push('TSN');
+                    matched++;
+                }
+            }
+        });
+
+        if (matched > 0) {
+            console.log(`[TSN] Matched ${matched} games in 3-day window`);
+            renderGames();
+        }
+    } catch (e) {
+        console.warn('[TSN] Integration skipped:', e);
+    }
+}
+
 async function fetchMlbNetworkGames() {
     try {
         const res = await fetch('mlbnetwork.php', {

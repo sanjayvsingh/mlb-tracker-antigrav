@@ -2,7 +2,6 @@
 /**
  * sheet.php - Fetches the owner's unseen-teams list from Google Sheets.
  * Parses column 13 (0-indexed) from each data row and returns a JSON array.
- * Caches results for 30 minutes.
  */
 
 require_once 'token.php';
@@ -29,21 +28,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 csrf_verify();
 
-$cacheFile = 'sheet_cache.json';
-$cacheTTL  = 30 * 60; // 30 minutes
-
-if (file_exists($cacheFile)) {
-    $age = time() - filemtime($cacheFile);
-    if ($age < $cacheTTL) {
-        $cached = json_decode(file_get_contents($cacheFile), true);
-        if ($cached !== null) {
-            $cached['from_cache'] = true;
-            echo json_encode($cached);
-            exit;
-        }
-    }
-}
-
 if (file_exists('sheet_id.php')) {
     $sheetId = require 'sheet_id.php';
 } else {
@@ -69,15 +53,8 @@ $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
 if (!$csv || $httpCode !== 200) {
-    $stale = file_exists($cacheFile) ? json_decode(file_get_contents($cacheFile), true) : null;
-    if ($stale !== null) {
-        $stale['from_cache'] = true;
-        $stale['stale']      = true;
-        echo json_encode($stale);
-    } else {
-        http_response_code(502);
-        echo json_encode(['error' => 'Failed to fetch sheet']);
-    }
+    http_response_code(502);
+    echo json_encode(['error' => 'Failed to fetch sheet']);
     exit;
 }
 
@@ -110,7 +87,5 @@ foreach ($lines as $line) {
     }
 }
 
-$result = ['teams' => $teams, 'from_cache' => false];
-file_put_contents($cacheFile, json_encode($result));
-echo json_encode($result);
+echo json_encode(['teams' => $teams]);
 ?>
