@@ -32,7 +32,7 @@ The application integrates data from multiple real-time sources to calculate the
 
 - **Google Gemini API**:
   - `gemini-3-flash-preview`: Securely proxied through a PHP backend (`gemini.php`) to fetch short, dynamic reasons to watch targeted MLB games and caches them locally for 6 hours to conserve API limits.
-  - `gemini-3.1-flash-lite-preview`: Serves as an automatic fallback if the primary model reaches its rate limit (429) or is unavailable (503). Also used automatically when `debugDate` is set to conserve quota during testing.
+  - `gemini-3.1-flash-lite`: Serves as an automatic fallback if the primary model reaches its rate limit (429) or is unavailable (503). Also used automatically when `debugDate` is set to conserve quota during testing.
 
 - **Canadian Broadcaster Scraping**:
   - `sportsnet.php`: Parses live and upcoming MLB matchups from Sportsnet's internal schedule API. Fetches up to 4 dates in parallel using `curl_multi` and caches results for 4 hours.

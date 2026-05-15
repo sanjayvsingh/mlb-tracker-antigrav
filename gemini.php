@@ -161,7 +161,7 @@ $prompt = "You are an MLB analyst. Below is a list of all MLB games over the nex
 
 
 $primaryModel = "gemini-3-flash-preview";
-$lightModel = "gemini-3.1-flash-lite-preview";
+$lightModel = "gemini-3.1-flash-lite";
 
 $currentModel = $debugDate ? $lightModel : $primaryModel;
 
