@@ -18,6 +18,7 @@ const CUSTOM_ELECTRIC_KEY = 'mlb_custom_electric';
 // Populated from electric.php (top 10 by formula) + user's custom starters from localStorage
 let electricStarterIds  = new Set(); // MLB player IDs (numbers)
 let electricStarterData = [];        // [{id, name, team, k9, kbb, score}] for modal display
+let electricScoreMap    = new Map(); // id -> score for all GS>=3 pitchers
 let allPitcherRoster    = null;      // [{id, name, team}] loaded lazily for search
 
 const TEAM_ABBR = {
@@ -1391,6 +1392,12 @@ async function fetchElectricStarters() {
 
         electricStarterData = data.players;
 
+        // Build score lookup for all GS>=3 pitchers
+        electricScoreMap = new Map();
+        if (data.scores) {
+            Object.entries(data.scores).forEach(([id, score]) => electricScoreMap.set(Number(id), score));
+        }
+
         // Rebuild ID set: formula top-10 + custom
         electricStarterIds = new Set();
         electricStarterData.forEach(p => electricStarterIds.add(p.id));
@@ -1466,12 +1473,17 @@ function renderElectricModal() {
         : '<tr><td colspan="6" class="em-loading">Loading…</td></tr>';
 
     const customChips = custom.length
-        ? custom.map(p => `
+        ? custom.map(p => {
+            const score = electricScoreMap.get(p.id);
+            const scoreTag = score != null ? `<span class="em-chip-score">${score.toFixed(2)}</span>` : '';
+            return `
             <div class="custom-chip" data-id="${p.id}">
                 <span>${escapeHTML(p.name)}</span>
                 <span class="em-team-small">${escapeHTML(p.team)}</span>
+                ${scoreTag}
                 <button class="custom-chip-remove" data-id="${p.id}" title="Remove">×</button>
-            </div>`).join('')
+            </div>`;
+        }).join('')
         : '<p class="em-empty">No custom starters yet.</p>';
 
     body.innerHTML = `

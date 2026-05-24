@@ -540,7 +540,10 @@ try {
 
                         $top10 = $scored | Sort-Object score -Descending | Select-Object -First 10
 
-                        $elecResult = @{ season = $season; total_qualified = $n; players = @($top10); from_cache = $false }
+                        $scoreMap = @{}
+                        foreach ($sp in $scored) { $scoreMap["$($sp.id)"] = $sp.score }
+
+                        $elecResult = @{ season = $season; total_qualified = $n; players = @($top10); scores = $scoreMap; from_cache = $false }
                         $elecJson   = ConvertTo-Json $elecResult -Depth 10 -Compress
                         [System.IO.File]::WriteAllText($elecCacheFile, $elecJson, [System.Text.Encoding]::UTF8)
                         Write-Host "Electric: scored $n qualified pitchers"

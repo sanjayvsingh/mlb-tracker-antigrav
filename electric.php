@@ -93,7 +93,11 @@ unset($p);
 usort($players, fn($a, $b) => $b['score'] <=> $a['score']);
 
 $top10  = array_slice($players, 0, 10);
-$result = ['season' => $season, 'total_qualified' => $n, 'players' => $top10, 'from_cache' => false];
+$scores = [];
+foreach ($players as $p) {
+    $scores[(string)$p['id']] = $p['score'];
+}
+$result = ['season' => $season, 'total_qualified' => $n, 'players' => $top10, 'scores' => $scores, 'from_cache' => false];
 
 file_put_contents($cacheFile, json_encode($result));
 
