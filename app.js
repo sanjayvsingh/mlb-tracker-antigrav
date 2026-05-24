@@ -1567,15 +1567,8 @@ async function showPitcherResults(query) {
     if (matches.length === 0) { hidePitcherDropdown(); return; }
 
     const dd = document.getElementById('pitcher-search-results');
-    const input = document.getElementById('pitcher-search-input');
-    if (!dd || !input) return;
+    if (!dd) return;
     _pitcherHighlightIndex = -1;
-
-    // Position fixed dropdown below the input, escaping the modal's overflow container
-    const rect = input.getBoundingClientRect();
-    dd.style.top   = (rect.bottom + 4) + 'px';
-    dd.style.left  = rect.left + 'px';
-    dd.style.width = rect.width + 'px';
 
     dd.innerHTML = matches.map(p => {
         const alreadyCustom = customIds.has(p.id);
@@ -1591,6 +1584,7 @@ async function showPitcherResults(query) {
     }).join('');
 
     dd.style.display = 'block';
+    document.getElementById('pitcher-search-input')?.classList.add('has-results');
 
     dd.querySelectorAll('.pitcher-result-item:not(.already-added)').forEach(el => {
         el.addEventListener('click', () => {
@@ -1605,6 +1599,7 @@ async function showPitcherResults(query) {
 function hidePitcherDropdown() {
     const dd = document.getElementById('pitcher-search-results');
     if (dd) dd.style.display = 'none';
+    document.getElementById('pitcher-search-input')?.classList.remove('has-results');
     _pitcherHighlightIndex = -1;
 }
 
