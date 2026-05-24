@@ -1,4 +1,4 @@
-$port = 8080
+$port = 8000
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://127.0.0.1:$port/")
 $listener.Prefixes.Add("http://localhost:$port/")
@@ -20,7 +20,7 @@ try {
             
             if ($context.Request.HttpMethod -eq 'OPTIONS') {
                 $origin = $context.Request.Headers["Origin"]
-                if ($origin -match "http://localhost:8080|http://127.0.0.1:8080|https://mlb.sanvash.com") {
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
                     $response.AddHeader("Access-Control-Allow-Origin", $origin)
                 }
                 $response.AddHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
@@ -32,7 +32,7 @@ try {
 
             if ($localPath -eq 'gemini.php' -and $context.Request.HttpMethod -eq 'POST') {
                 $origin = $context.Request.Headers["Origin"]
-                if ($origin -match "http://localhost:8080|http://127.0.0.1:8080|https://mlb.sanvash.com") {
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
                     $response.AddHeader("Access-Control-Allow-Origin", $origin)
                 }
                 
@@ -241,7 +241,7 @@ try {
             # Sportsnet scraper endpoint
             if ($localPath -eq 'sportsnet.php' -and $context.Request.HttpMethod -eq 'GET') {
                 $origin = $context.Request.Headers["Origin"]
-                if ($origin -match "http://localhost:8080|http://127.0.0.1:8080|https://mlb.sanvash.com") {
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
                     $response.AddHeader("Access-Control-Allow-Origin", $origin)
                 }
                 
@@ -372,7 +372,7 @@ try {
             # MLB Network scraper endpoint
             if ($localPath -eq 'mlbnetwork.php' -and $context.Request.HttpMethod -eq 'GET') {
                 $origin = $context.Request.Headers["Origin"]
-                if ($origin -match "http://localhost:8080|http://127.0.0.1:8080|https://mlb.sanvash.com") {
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
                     $response.AddHeader("Access-Control-Allow-Origin", $origin)
                 }
                 
@@ -463,8 +463,232 @@ try {
                 continue
             }
 
+            # TSN MLB schedule endpoint
+            if ($localPath -eq 'tsn.php' -and $context.Request.HttpMethod -eq 'GET') {
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                $response.ContentType = "application/json"
+
+                $tsnCacheFile = Join-Path $PSScriptRoot "tsn_cache.json"
+                $tsnCacheValid = $false
+                if (Test-Path $tsnCacheFile) {
+                    if ((Get-Date) - (Get-Item $tsnCacheFile).LastWriteTime -lt (New-TimeSpan -Hours 24)) {
+                        $tsnCacheValid = $true
+                    }
+                }
+
+                if ($tsnCacheValid) {
+                    $tc = [System.IO.File]::ReadAllBytes($tsnCacheFile)
+                    try {
+                        $to = ConvertFrom-Json ([System.Text.Encoding]::UTF8.GetString($tc))
+                        $to | Add-Member -MemberType NoteProperty -Name "from_cache" -Value $true -Force
+                        $tc = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $to -Depth 5 -Compress))
+                    } catch {}
+                    $response.ContentLength64 = $tc.Length
+                    $response.OutputStream.Write($tc, 0, $tc.Length)
+                } else {
+                    try {
+                        Write-Host "Fetching TSN MLB schedule..."
+                        $tsnHtml = (Invoke-WebRequest -Uri "https://www.tsn.ca/mlb/article/2025-mlb-on-tsn-schedule/" -UseBasicParsing -TimeoutSec 10 -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36").Content
+
+                        $tsnGames = @()
+                        $year = (Get-Date).Year
+
+                        # Find the first <table> and parse rows: Date | Time | Away | Home | Network
+                        $tableMatch = [regex]::Match($tsnHtml, '(?is)<table[^>]*>(.*?)</table>')
+                        if ($tableMatch.Success) {
+                            $rows = [regex]::Matches($tableMatch.Groups[1].Value, '(?is)<tr[^>]*>(.*?)</tr>')
+                            foreach ($row in $rows) {
+                                $cols = [regex]::Matches($row.Groups[1].Value, '(?is)<td[^>]*>(.*?)</td>')
+                                if ($cols.Count -lt 4) { continue }
+
+                                $dateRaw = [regex]::Replace($cols[0].Groups[1].Value, '<[^>]+>', '').Trim()
+                                $timeRaw = [regex]::Replace($cols[1].Groups[1].Value, '<[^>]+>', '').Trim()
+                                $awayRaw = [regex]::Replace($cols[2].Groups[1].Value, '<[^>]+>', '').Trim()
+                                $homeRaw = [regex]::Replace($cols[3].Groups[1].Value, '<[^>]+>', '').Trim()
+
+                                # Strip "Sunday, " prefix and parse "May 3" -> YYYY-MM-DD
+                                $cleanDate = $dateRaw -replace '^[a-zA-Z]+,\s*', ''
+                                try {
+                                    $dtParsed = [DateTime]::ParseExact("$cleanDate $year", 'MMMM d yyyy', [System.Globalization.CultureInfo]::InvariantCulture)
+                                    $formattedDate = $dtParsed.ToString('yyyy-MM-dd')
+                                } catch { continue }
+
+                                if ($awayRaw -and $homeRaw -and $formattedDate) {
+                                    $tsnGames += @{ away = $awayRaw; home = $homeRaw; date = $formattedDate; time = $timeRaw; status = 'UPCOMING' }
+                                }
+                            }
+                        }
+
+                        $tsnResult = @{ games = $tsnGames; from_cache = $false }
+                        $tsnJson   = ConvertTo-Json $tsnResult -Depth 5 -Compress
+                        [System.IO.File]::WriteAllText($tsnCacheFile, $tsnJson, [System.Text.Encoding]::UTF8)
+                        Write-Host "TSN: Found $($tsnGames.Count) games"
+                        $tsnBytes = [System.Text.Encoding]::UTF8.GetBytes($tsnJson)
+                        $response.ContentLength64 = $tsnBytes.Length
+                        $response.OutputStream.Write($tsnBytes, 0, $tsnBytes.Length)
+                    } catch {
+                        Write-Host "TSN fetch failed: $($_.Exception.Message)"
+                        if (Test-Path $tsnCacheFile) {
+                            $staleT = [System.IO.File]::ReadAllBytes($tsnCacheFile)
+                            try {
+                                $staleTO = ConvertFrom-Json ([System.Text.Encoding]::UTF8.GetString($staleT))
+                                $staleTO | Add-Member -MemberType NoteProperty -Name "from_cache" -Value $true -Force
+                                $staleTO | Add-Member -MemberType NoteProperty -Name "stale" -Value $true -Force
+                                $staleT = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $staleTO -Depth 5 -Compress))
+                            } catch {}
+                            $response.ContentLength64 = $staleT.Length
+                            $response.OutputStream.Write($staleT, 0, $staleT.Length)
+                        } else {
+                            $eb = [System.Text.Encoding]::UTF8.GetBytes('{"games":[],"error":"Failed to fetch TSN schedule"}')
+                            $response.ContentLength64 = $eb.Length
+                            $response.OutputStream.Write($eb, 0, $eb.Length)
+                        }
+                    }
+                }
+                $response.Close()
+                continue
+            }
+
+            # Bananas (Savannah Bananas / Banana Ball) YouTube schedule endpoint
+            if ($localPath -eq 'bananas.php' -and $context.Request.HttpMethod -eq 'GET') {
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                $response.ContentType = "application/json"
+
+                $bananaCacheFile = Join-Path $PSScriptRoot "bananas_cache.json"
+                $bananaCacheValid = $false
+                if (Test-Path $bananaCacheFile) {
+                    if ((Get-Date) - (Get-Item $bananaCacheFile).LastWriteTime -lt (New-TimeSpan -Hours 4)) {
+                        $bananaCacheValid = $true
+                    }
+                }
+
+                if ($bananaCacheValid) {
+                    $bc = [System.IO.File]::ReadAllBytes($bananaCacheFile)
+                    try {
+                        $bo = ConvertFrom-Json ([System.Text.Encoding]::UTF8.GetString($bc))
+                        $bo | Add-Member -MemberType NoteProperty -Name "from_cache" -Value $true -Force
+                        $bc = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $bo -Depth 5 -Compress))
+                    } catch {}
+                    $response.ContentLength64 = $bc.Length
+                    $response.OutputStream.Write($bc, 0, $bc.Length)
+                } else {
+                    try {
+                        Write-Host "Fetching Savannah Bananas schedule..."
+                        $bananaHtml = (Invoke-WebRequest -Uri "https://thesavannahbananas.com/schedule/" -UseBasicParsing -TimeoutSec 10 -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36").Content
+
+                        # Hours to add to convert a US tz label to Eastern during DST
+                        # The site uses standard abbreviations (PST/CST) even in summer
+                        function Get-BananaEtOffset($tz) {
+                            switch ($tz.ToUpper().Trim()) {
+                                'PDT' { return 3 } 'PST' { return 3 }
+                                'MDT' { return 2 } 'MST' { return 2 }
+                                'CDT' { return 1 } 'CST' { return 1 }
+                                default { return 0 }
+                            }
+                        }
+                        function Convert-BananaToEtTime($timeStr, $tzLabel) {
+                            $clean = $timeStr.Trim().ToLower() -replace '\s', ''
+                            try {
+                                $dt = [DateTime]::ParseExact($clean, 'h:mmtt', [System.Globalization.CultureInfo]::InvariantCulture)
+                                $dt = $dt.AddHours((Get-BananaEtOffset $tzLabel))
+                                return $dt.ToString('HH:mm')
+                            } catch { return $null }
+                        }
+
+                        $bananaGames = @()
+                        $seenKeys   = @{}
+                        $todayD     = (Get-Date).Date
+
+                        # Page uses <div class="event_row" data-date="YYYY-MM-DD">
+                        # Split on each event_row opening tag
+                        $blocks = [regex]::Split($bananaHtml, '(?=<div[^>]+class="event_row"[^>]+data-date)')
+
+                        foreach ($block in $blocks) {
+                            if ($block -notmatch 'class="event_row"') { continue }
+
+                            # Only rows with YouTube in the watch column
+                            if ($block -notmatch '(?i)col_watch') { continue }
+                            $watchBlock = [regex]::Match($block, '(?is)col_watch(.*?)col_status')
+                            if (-not $watchBlock.Success) { continue }
+                            if ($watchBlock.Value -notmatch '(?i)YouTube') { continue }
+
+                            # Date from data-date attribute (already YYYY-MM-DD)
+                            $dm = [regex]::Match($block, 'data-date="(\d{4}-\d{2}-\d{2})"')
+                            if (-not $dm.Success) { continue }
+                            $gameDate = $dm.Groups[1].Value
+                            try {
+                                $gameDt = [DateTime]::ParseExact($gameDate, 'yyyy-MM-dd', $null)
+                                if ($gameDt -lt $todayD -or $gameDt -gt $todayD.AddDays(14)) { continue }
+                            } catch { continue }
+
+                            # Team names from img alt attributes
+                            $altMx    = [regex]::Matches($block, 'alt="([^"]+)"')
+                            $awayTeam = if ($altMx.Count -ge 1) { $altMx[0].Groups[1].Value.Trim() } else { '' }
+                            $homeTeam = if ($altMx.Count -ge 2) { $altMx[1].Groups[1].Value.Trim() } else { '' }
+
+                            # Time: e.g. "1:00pm PST" or "7:00pm CST"
+                            $tm = [regex]::Match($block, '(\d{1,2}:\d{2}[ap]m)\s*([A-Z]{2,3}T)\b')
+                            $timeEt = $null
+                            if ($tm.Success) {
+                                $timeEt = Convert-BananaToEtTime $tm.Groups[1].Value $tm.Groups[2].Value
+                            }
+                            if (-not $timeEt) { continue }
+
+                            # Venue from col_stadium, stripping HTML and the @time part
+                            $venue = ''
+                            $vb = [regex]::Match($block, '(?is)col_stadium.*?<p>(.*?)</p>')
+                            if ($vb.Success) {
+                                $venue = [regex]::Replace($vb.Groups[1].Value, '<[^>]+>', ' ')
+                                $venue = ([regex]::Replace($venue, '\s+', ' ')).Trim()
+                                $venue = [regex]::Replace($venue, '\s*@\d.*', '').Trim()
+                            }
+
+                            $key = "$gameDate|$($awayTeam.ToLower())|$($homeTeam.ToLower())"
+                            if ($seenKeys.ContainsKey($key)) { continue }
+                            $seenKeys[$key] = $true
+
+                            $bananaGames += @{ away = $awayTeam; home = $homeTeam; date = $gameDate; time_et = $timeEt; venue = $venue }
+                        }
+
+                        $bananaResult = @{ games = $bananaGames; from_cache = $false }
+                        $bananaJson   = ConvertTo-Json $bananaResult -Depth 5 -Compress
+                        [System.IO.File]::WriteAllText($bananaCacheFile, $bananaJson, [System.Text.Encoding]::UTF8)
+                        Write-Host "Bananas: Found $($bananaGames.Count) YouTube games"
+                        $bananaBytes = [System.Text.Encoding]::UTF8.GetBytes($bananaJson)
+                        $response.ContentLength64 = $bananaBytes.Length
+                        $response.OutputStream.Write($bananaBytes, 0, $bananaBytes.Length)
+                    } catch {
+                        Write-Host "Bananas fetch failed: $($_.Exception.Message)"
+                        if (Test-Path $bananaCacheFile) {
+                            $staleB = [System.IO.File]::ReadAllBytes($bananaCacheFile)
+                            try {
+                                $staleObj = ConvertFrom-Json ([System.Text.Encoding]::UTF8.GetString($staleB))
+                                $staleObj | Add-Member -MemberType NoteProperty -Name "from_cache" -Value $true -Force
+                                $staleObj | Add-Member -MemberType NoteProperty -Name "stale" -Value $true -Force
+                                $staleB = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $staleObj -Depth 5 -Compress))
+                            } catch {}
+                            $response.ContentLength64 = $staleB.Length
+                            $response.OutputStream.Write($staleB, 0, $staleB.Length)
+                        } else {
+                            $errMsg = $_.Exception.Message -replace '"', "'"
+                            $eb = [System.Text.Encoding]::UTF8.GetBytes("{`"games`":[],`"error`":`"$errMsg`"}")
+                            $response.ContentLength64 = $eb.Length
+                            $response.OutputStream.Write($eb, 0, $eb.Length)
+                        }
+                    }
+                }
+                $response.Close()
+                continue
+            }
+
             $filePath = Join-Path $PSScriptRoot $localPath
-            
+
             # Block sensitive file extensions
             if ($filePath -match '\.(php|ps1|md|env|gitignore|git|log|json)$' -and $localPath -ne 'al_standings.json' -and $localPath -ne 'schedule.json' -and $localPath -ne 'season_leaders.json') {
                 $response.StatusCode = 403

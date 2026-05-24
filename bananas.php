@@ -101,6 +101,58 @@ if (!$html || $httpCode !== 200) {
 }
 
 $games = [];
+$seen  = [];
+$todayTs   = strtotime(date('Y-m-d'));
+$windowEnd = $todayTs + (14 * 24 * 60 * 60);
+
+// Parse using the known page structure:
+// <div class="event_row" data-date="YYYY-MM-DD">
+//   <div class="col col_teams"><img alt="Away Team"> <span>vs</span> <img alt="Home Team"></div>
+//   <div class="col col_stadium"><p>Venue <span class="game-time">@7:00pm CST</span></p></div>
+//   <div class="col col_time"><p>7:00pm CST</p></div>
+//   <div class="col col_watch"><p>YouTube</p></div>
+// </div>
+
+$blocks = preg_split('/(?=<div[^>]+class="event_row"[^>]+data-date)/i', $html);
+foreach ($blocks as $block) {
+    if (stripos($block, 'event_row') === false) continue;
+
+    // Must have YouTube in the watch column
+    if (!preg_match('/col_watch(.*?)col_status/si', $block, $watchM)) continue;
+    if (stripos($watchM[1], 'youtube') === false) continue;
+
+    // Date from data-date attribute (already YYYY-MM-DD)
+    if (!preg_match('/data-date="(\d{4}-\d{2}-\d{2})"/i', $block, $dm)) continue;
+    $gameDate = $dm[1];
+    $ts = strtotime($gameDate);
+    if (!$ts || $ts < $todayTs || $ts > $windowEnd) continue;
+
+    // Team names from img alt attributes
+    preg_match_all('/alt="([^"]+)"/i', $block, $altMx);
+    $away = isset($altMx[1][0]) ? trim($altMx[1][0]) : '';
+    $home = isset($altMx[1][1]) ? trim($altMx[1][1]) : '';
+
+    // Time: e.g. "1:00pm PST" or "7:00pm CST"
+    if (!preg_match('/(\d{1,2}:\d{2}[ap]m)\s*([A-Z]{2,3}T)\b/i', $block, $tm)) continue;
+    $timeEt = toEtTime($tm[1], $tm[2]);
+    if (!$timeEt) continue;
+
+    // Venue from col_stadium, stripping HTML and the @time annotation
+    $venue = '';
+    if (preg_match('/col_stadium.*?<p>(.*?)<\/p>/si', $block, $vb)) {
+        $venue = preg_replace('/<[^>]+>/', ' ', $vb[1]);
+        $venue = trim(preg_replace('/\s+/', ' ', $venue));
+        $venue = trim(preg_replace('/\s*@\d.*/', '', $venue));
+    }
+
+    $k = $gameDate . '|' . strtolower($away) . '|' . strtolower($home);
+    if (isset($seen[$k])) continue;
+    $seen[$k] = true;
+
+    $games[] = ['away' => $away, 'home' => $home, 'date' => $gameDate, 'time_et' => $timeEt, 'venue' => $venue];
+}
+
+// --- Legacy strategies kept as fallbacks if the page structure changes ---
 
 // --- Strategy 1: JSON-LD structured data ---
 preg_match_all('/<script[^>]+type=["\']application\/ld\+json["\'][^>]*>\s*(.*?)\s*<\/script>/si', $html, $jsonLdMatches);
@@ -250,22 +302,8 @@ if (empty($games)) {
     }
 }
 
-// Filter to games within the next 14 days and deduplicate
-$todayTs   = strtotime(date('Y-m-d'));
-$windowEnd = $todayTs + (14 * 24 * 60 * 60);
-$deduped   = [];
-$dedupKeys = [];
-foreach ($games as $g) {
-    $ts = strtotime($g['date'] ?? '');
-    if (!$ts || $ts < $todayTs || $ts > $windowEnd) continue;
-    $k = $g['date'] . '|' . strtolower($g['away']) . '|' . strtolower($g['home']);
-    if (isset($dedupKeys[$k])) continue;
-    $dedupKeys[$k] = true;
-    $deduped[] = $g;
-}
-
-if (!empty($deduped)) {
-    $result = ['games' => $deduped, 'from_cache' => false];
+if (!empty($games)) {
+    $result = ['games' => $games, 'from_cache' => false];
     file_put_contents($cacheFile, json_encode($result));
     echo json_encode($result);
 } else {
