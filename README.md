@@ -42,6 +42,9 @@ The application integrates data from multiple real-time sources to calculate the
 - **MLB Network Scraping**:
   - `mlbnetwork.php`: A backend scraper that fetches and parses the MLB Network live games schedule from `mlb.com`. Extracts game matchups, dates, and times and caches results for 24 hours. Games broadcast on MLB Network are surfaced as Featured Broadcasts in the UI.
 
+- **Banana Ball (Savannah Bananas)**:
+  - `bananas.php`: Scrapes the Savannah Bananas schedule page and returns games broadcast on YouTube within the next 14 days. Times are converted from local venue timezone (PST/CST/EST) to Eastern. Caches results for 4 hours. Banana Ball games are injected into the 3-day schedule as separate cards marked with a 🍌 yellow banana icon and bypass MLB-specific filters (fun score, unseen status, etc.).
+
 ## 🔗 URL Parameters
 
 You can customize the application state using the following parameters:

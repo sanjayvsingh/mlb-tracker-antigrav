@@ -136,10 +136,11 @@ async function loadEverything() {
         renderMetrics();
         renderGames();
 
-        // Phase 2.5: Apply Canadian and MLB Network featured broadcasts (non-blocking)
+        // Phase 2.5: Apply Canadian, MLB Network, and Banana Ball broadcasts (non-blocking)
         fetchSportsnetGames(); // No await — runs in background
         fetchTsnGames();       // No await — runs in background
         fetchMlbNetworkGames(); // No await — runs in background
+        fetchBananaBallGames(); // No await — runs in background
 
         // Phase 3: Fire Gemini in background (needs all enrichment data for prompt)
         const allGames = [...(gamesData.today || []), ...(gamesData.tomorrow || []), ...(gamesData.dayafter || [])];
@@ -778,6 +779,7 @@ function renderGames() {
     // Apply filters
     const filtered = list.filter(g => {
         if (g.date < oneHourAgo) return false;
+        if (g.isBananaBall) return true; // bypass MLB-specific filters
         if (filters.bothUnseen && !g.bothUnseen) return false;
         if (filters.featured && g.featuredNetworks.length === 0) return false;
         if (filters.electric && !g.anyElectric) return false;
@@ -793,37 +795,57 @@ function renderGames() {
     
     dom.gamesContainer.innerHTML = filtered.map(g => {
         const timeStr = escapeHTML(g.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) + ' ET');
-        const funTooltip = (() => {
-            const components = [];
-            const awayScore = TEAM_FUN_SCORES[g.away.nickname] || 0;
-            const homeScore = TEAM_FUN_SCORES[g.home.nickname] || 0;
-            const electric = (g.away.electric ? 1 : 0) + (g.home.electric ? 1 : 0);
-            const hotBonus = g.hotHitterInfo.length;
-            const milestoneBonus = g.milestoneInfo.length * 2;
-            
-            if (awayScore > 0) components.push(`${awayScore} ${g.away.nickname}`);
-            if (homeScore > 0) components.push(`${homeScore} ${g.home.nickname}`);
-            if (electric > 0) components.push(`+${electric} Electric starter`);
-            if (hotBonus > 0) components.push(`+${hotBonus} Hot hitters`);
-            if (milestoneBonus > 0) components.push(`+${milestoneBonus} Milestones`);
-            if (g.isShowcase) components.push(`+1 Showcase game`);
-            
-            return `Fun score: ${g.funScore}${components.length > 0 ? ` (${components.join(', ')})` : ''}`;
-        })();
-        const hotHitterTooltip = g.hotHitterInfo.map(h => `${h.name} (${h.stat})`).join(', ');
-        const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');
-        const badgesHtml = [
-            `<div class="badge fun-badge" title="${escapeHTML(funTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${escapeHTML(g.funScore)}</div>`,
-            g.isShowcase ? `<div class="badge showcase-badge" title="${escapeHTML(g.showcaseReason)}"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">auto_awesome</span>SHOWCASE</div>` : '',
-            g.bothUnseen ? `<div class="badge both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : '',
-            g.anyElectric ? `<div class="badge electric-badge mobile-only"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">bolt</span>ELECTRIC SP</div>` : '',
-            g.hotHitterInfo.length > 0 ? `<div class="badge hot-hitter-badge" title="${escapeHTML(hotHitterTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">local_fire_department</span>HOT BATS</div>` : '',
-            g.milestoneInfo.length > 0 ? `<div class="badge milestone-badge" title="${escapeHTML(milestoneTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">emoji_events</span>MILESTONE</div>` : '',
-            ...g.featuredNetworks.map(n => `<div class="badge network-badge">${escapeHTML(n)}</div>`)
-        ].join('');
-        
+
+        let badgesHtml;
+        let pitcherSplitHtml;
+
+        if (g.isBananaBall) {
+            badgesHtml = `<div class="badge banana-badge" title="Banana Ball game on YouTube">🍌 YouTube</div>`;
+            pitcherSplitHtml = `
+                    <div class="pitcher-split">
+                        <div>${escapeHTML(g.location)}</div>
+                        <div></div>
+                    </div>`;
+        } else {
+            const funTooltip = (() => {
+                const components = [];
+                const awayScore = TEAM_FUN_SCORES[g.away.nickname] || 0;
+                const homeScore = TEAM_FUN_SCORES[g.home.nickname] || 0;
+                const electric = (g.away.electric ? 1 : 0) + (g.home.electric ? 1 : 0);
+                const hotBonus = g.hotHitterInfo.length;
+                const milestoneBonus = g.milestoneInfo.length * 2;
+                if (awayScore > 0) components.push(`${awayScore} ${g.away.nickname}`);
+                if (homeScore > 0) components.push(`${homeScore} ${g.home.nickname}`);
+                if (electric > 0) components.push(`+${electric} Electric starter`);
+                if (hotBonus > 0) components.push(`+${hotBonus} Hot hitters`);
+                if (milestoneBonus > 0) components.push(`+${milestoneBonus} Milestones`);
+                if (g.isShowcase) components.push(`+1 Showcase game`);
+                return `Fun score: ${g.funScore}${components.length > 0 ? ` (${components.join(', ')})` : ''}`;
+            })();
+            const hotHitterTooltip = g.hotHitterInfo.map(h => `${h.name} (${h.stat})`).join(', ');
+            const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');
+            badgesHtml = [
+                `<div class="badge fun-badge" title="${escapeHTML(funTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${escapeHTML(g.funScore)}</div>`,
+                g.isShowcase ? `<div class="badge showcase-badge" title="${escapeHTML(g.showcaseReason)}"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">auto_awesome</span>SHOWCASE</div>` : '',
+                g.bothUnseen ? `<div class="badge both-unseen-badge"><span class="material-icons" style="font-size: inherit; vertical-align: middle; margin-right: 4px;">star</span>BOTH UNSEEN</div>` : '',
+                g.anyElectric ? `<div class="badge electric-badge mobile-only"><span class="material-icons" style="font-size: 14px; vertical-align: middle; margin-right: 2px;">bolt</span>ELECTRIC SP</div>` : '',
+                g.hotHitterInfo.length > 0 ? `<div class="badge hot-hitter-badge" title="${escapeHTML(hotHitterTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">local_fire_department</span>HOT BATS</div>` : '',
+                g.milestoneInfo.length > 0 ? `<div class="badge milestone-badge" title="${escapeHTML(milestoneTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">emoji_events</span>MILESTONE</div>` : '',
+                ...g.featuredNetworks.map(n => `<div class="badge network-badge">${escapeHTML(n)}</div>`)
+            ].join('');
+            pitcherSplitHtml = `
+                    <div class="pitcher-split">
+                        <div class="${g.away.electric ? 'electric-sp' : ''}">
+                            ${escapeHTML(g.away.sp)} ${g.away.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
+                        </div>
+                        <div class="${g.home.electric ? 'electric-sp' : ''}">
+                            ${escapeHTML(g.home.sp)} ${g.home.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
+                        </div>
+                    </div>`;
+        }
+
         return `
-            <div class="game-card-row">
+            <div class="game-card-row${g.isBananaBall ? ' banana-ball-card' : ''}">
                 <div class="team-split">
                     <div class="matchup-team">
                         ${g.away.official ? (g.away.unseen ? `<span class="material-icons unseen-icon">visibility</span>` : `<span class="material-icons seen-icon">check</span>`) : ''}
@@ -834,16 +856,7 @@ function renderGames() {
                         <span class="team-name ${g.home.unseen ? 'unseen-text' : ''}">${escapeHTML(g.home.name)}</span>
                     </div>
                 </div>
-                
-                <div class="pitcher-split">
-                    <div class="${g.away.electric ? 'electric-sp' : ''}">
-                        ${escapeHTML(g.away.sp)} ${g.away.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
-                    </div>
-                    <div class="${g.home.electric ? 'electric-sp' : ''}">
-                        ${escapeHTML(g.home.sp)} ${g.home.electric ? '<span class="material-icons electric-star">bolt</span>' : ''}
-                    </div>
-                </div>
-                
+                ${pitcherSplitHtml}
                 <div class="game-meta">
                     <div class="game-time">${timeStr}</div>
                     <div class="game-badges">
@@ -1286,6 +1299,70 @@ async function fetchMlbNetworkGames() {
         }
     } catch (e) {
         console.warn('MLB Network integration skipped:', e);
+    }
+}
+
+async function fetchBananaBallGames() {
+    try {
+        const res = await fetch('bananas.php', {
+            headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
+        });
+        if (!res.ok) {
+            console.warn('[Bananas] Fetch failed:', res.status);
+            return;
+        }
+        const data = await res.json();
+        if (data.stale) console.warn('[Bananas] Serving stale cache.');
+        else if (data.from_cache) console.log('[Bananas] Loaded from cache');
+        if (!data.games || data.games.length === 0) {
+            console.log('[Bananas] No YouTube games found');
+            return;
+        }
+
+        console.log(`[Bananas] ${data.games.length} YouTube games available`);
+
+        const today = getToday();
+        const d0Str = getLocalDateString(today);
+        const d1Str = getLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
+        const d2Str = getLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2));
+
+        let added = 0;
+        data.games.forEach(bg => {
+            const timeEt = bg.time_et || '19:00';
+            const gameDate = new Date(`${bg.date}T${timeEt}:00`);
+            const gameObj = {
+                id: `banana_${bg.date}_${(bg.away + bg.home).replace(/\s+/g, '_')}`,
+                date: gameDate,
+                location: bg.venue || 'Banana Ball',
+                isBananaBall: true,
+                away: { name: bg.away || 'TBD', nickname: bg.away || 'TBD', official: false, unseen: false, sp: '', electric: false },
+                home: { name: bg.home || 'TBD', nickname: bg.home || 'TBD', official: false, unseen: false, sp: '', electric: false },
+                funScore: 0,
+                isHighFun: false,
+                bothUnseen: false,
+                anyUnseen: false,
+                anyElectric: false,
+                isShowcase: false,
+                allNetworks: 'YouTube',
+                featuredNetworks: [],
+                hotHitterInfo: [],
+                milestoneInfo: []
+            };
+
+            if (bg.date === d0Str)      { gamesData.today.push(gameObj);    added++; }
+            else if (bg.date === d1Str) { gamesData.tomorrow.push(gameObj); added++; }
+            else if (bg.date === d2Str) { gamesData.dayafter.push(gameObj); added++; }
+        });
+
+        if (added > 0) {
+            ['today', 'tomorrow', 'dayafter'].forEach(day => {
+                gamesData[day].sort((a, b) => a.date - b.date);
+            });
+            console.log(`[Bananas] Added ${added} games to 3-day window`);
+            renderGames();
+        }
+    } catch (e) {
+        console.warn('[Bananas] Integration skipped:', e);
     }
 }
 

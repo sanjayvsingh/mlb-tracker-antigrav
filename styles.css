@@ -213,6 +213,17 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
     cursor: help;
 }
 
+.banana-badge {
+    background: rgba(250, 204, 21, 0.12);
+    color: #facc15;
+    border: 1px solid rgba(250, 204, 21, 0.35);
+    cursor: help;
+}
+
+.banana-ball-card {
+    border-left: 3px solid rgba(250, 204, 21, 0.4);
+}
+
 @media (min-width: 769px) {
     .mobile-only {
         display: none !important;
