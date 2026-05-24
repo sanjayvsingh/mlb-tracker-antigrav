@@ -463,6 +463,103 @@ try {
                 continue
             }
 
+            # Electric starters endpoint
+            if ($localPath -eq 'electric.php' -and $context.Request.HttpMethod -eq 'GET') {
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                $response.ContentType = "application/json"
+
+                $elecCacheFile = Join-Path $PSScriptRoot "electric_cache.json"
+                $elecCacheValid = $false
+                if (Test-Path $elecCacheFile) {
+                    if ((Get-Date) - (Get-Item $elecCacheFile).LastWriteTime -lt (New-TimeSpan -Hours 24)) {
+                        $elecCacheValid = $true
+                    }
+                }
+
+                if ($elecCacheValid) {
+                    $ec = [System.IO.File]::ReadAllBytes($elecCacheFile)
+                    try {
+                        $eo = ConvertFrom-Json ([System.Text.Encoding]::UTF8.GetString($ec))
+                        $eo | Add-Member -MemberType NoteProperty -Name "from_cache" -Value $true -Force
+                        $ec = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json $eo -Depth 10 -Compress))
+                    } catch {}
+                    $response.ContentLength64 = $ec.Length
+                    $response.OutputStream.Write($ec, 0, $ec.Length)
+                } else {
+                    try {
+                        $season = (Get-Date).Year
+                        $apiUrl = "https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=$season&playerPool=All&limit=600"
+                        Write-Host "Fetching electric starters for $season..."
+                        $apiData = Invoke-RestMethod -Uri $apiUrl -TimeoutSec 10
+
+                        $splits = $apiData.stats[0].splits
+
+                        # Extract and filter: GS>=3 and valid K9 and KBB
+                        $players = @()
+                        foreach ($s in $splits) {
+                            $gs  = [int]($s.stat.gamesStarted -replace '[^0-9]', '')
+                            if ($gs -lt 3) { continue }
+                            $k9  = try { [double]($s.stat.strikeoutsPer9Inn  -replace '[^0-9.]', '') } catch { 0 }
+                            $kbb = try { [double]($s.stat.strikeoutWalkRatio -replace '[^0-9.]', '') } catch { 0 }
+                            if ($k9 -eq 0 -or $kbb -eq 0) { continue }
+                            $players += [PSCustomObject]@{
+                                id   = $s.player.id
+                                name = $s.player.fullName
+                                team = $s.team.name
+                                k9   = $k9
+                                kbb  = $kbb
+                            }
+                        }
+
+                        $n      = $players.Count
+                        $k9List  = $players | ForEach-Object { $_.k9 }
+                        $kbbList = $players | ForEach-Object { $_.kbb }
+
+                        function Get-Percentile([double]$x, [double[]]$list) {
+                            $cnt = ($list | Where-Object { $_ -le $x }).Count
+                            return [Math]::Round($cnt / $list.Count, 4)
+                        }
+
+                        $scored = $players | ForEach-Object {
+                            $k9p  = Get-Percentile $_.k9  $k9List
+                            $kbbp = Get-Percentile $_.kbb $kbbList
+                            [PSCustomObject]@{
+                                id      = $_.id
+                                name    = $_.name
+                                team    = $_.team
+                                k9      = $_.k9
+                                kbb     = $_.kbb
+                                k9_pct  = $k9p
+                                kbb_pct = $kbbp
+                                score   = [Math]::Round(($k9p * 1.3) + $kbbp, 4)
+                            }
+                        }
+
+                        $top10 = $scored | Sort-Object score -Descending | Select-Object -First 10
+
+                        $elecResult = @{ season = $season; total_qualified = $n; players = @($top10); from_cache = $false }
+                        $elecJson   = ConvertTo-Json $elecResult -Depth 10 -Compress
+                        [System.IO.File]::WriteAllText($elecCacheFile, $elecJson, [System.Text.Encoding]::UTF8)
+                        Write-Host "Electric: scored $n qualified pitchers"
+
+                        $elecPretty = ConvertTo-Json $elecResult -Depth 10
+                        $elecBytes  = [System.Text.Encoding]::UTF8.GetBytes($elecPretty)
+                        $response.ContentLength64 = $elecBytes.Length
+                        $response.OutputStream.Write($elecBytes, 0, $elecBytes.Length)
+                    } catch {
+                        Write-Host "Electric fetch failed: $($_.Exception.Message)"
+                        $eb = [System.Text.Encoding]::UTF8.GetBytes("{`"error`":`"$($_.Exception.Message -replace '"',"'")`"}")
+                        $response.ContentLength64 = $eb.Length
+                        $response.OutputStream.Write($eb, 0, $eb.Length)
+                    }
+                }
+                $response.Close()
+                continue
+            }
+
             # TSN MLB schedule endpoint
             if ($localPath -eq 'tsn.php' -and $context.Request.HttpMethod -eq 'GET') {
                 $origin = $context.Request.Headers["Origin"]
@@ -681,6 +778,68 @@ try {
                             $response.ContentLength64 = $eb.Length
                             $response.OutputStream.Write($eb, 0, $eb.Length)
                         }
+                    }
+                }
+                $response.Close()
+                continue
+            }
+
+            # Pitcher roster endpoint (for Electric Starters modal autocomplete)
+            if ($localPath -eq 'pitchers.php' -and $context.Request.HttpMethod -eq 'GET') {
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                $response.ContentType = "application/json"
+
+                $pitcherCacheFile = Join-Path $PSScriptRoot "pitchers_cache.json"
+                $pitcherCacheValid = $false
+                if (Test-Path $pitcherCacheFile) {
+                    if ((Get-Date) - (Get-Item $pitcherCacheFile).LastWriteTime -lt (New-TimeSpan -Hours 24)) {
+                        $pitcherCacheValid = $true
+                    }
+                }
+
+                if ($pitcherCacheValid) {
+                    $pc = [System.IO.File]::ReadAllBytes($pitcherCacheFile)
+                    $response.ContentLength64 = $pc.Length
+                    $response.OutputStream.Write($pc, 0, $pc.Length)
+                } else {
+                    try {
+                        $season = (Get-Date).Year
+                        $pitcherUrl = "https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&season=$season&playerPool=All&limit=600"
+                        Write-Host "Fetching pitcher roster for $season..."
+                        $pitcherData = Invoke-RestMethod -Uri $pitcherUrl -TimeoutSec 20
+
+                        $seenIds = @{}
+                        $pitchers = @()
+                        foreach ($s in $pitcherData.stats[0].splits) {
+                            $playerId = $s.player.id
+                            if ($seenIds.ContainsKey($playerId)) { continue }
+                            $seenIds[$playerId] = $true
+                            $pitchers += [PSCustomObject]@{
+                                id   = $playerId
+                                name = $s.player.fullName
+                                team = if ($s.team.name) { $s.team.name } else { '' }
+                            }
+                        }
+                        $pitchers = $pitchers | Sort-Object name
+
+                        $pitcherResult = @{ players = @($pitchers) }
+                        $pitcherJson   = ConvertTo-Json $pitcherResult -Depth 5 -Compress
+                        [System.IO.File]::WriteAllText($pitcherCacheFile, $pitcherJson, [System.Text.Encoding]::UTF8)
+                        Write-Host "Pitchers: cached $($pitchers.Count) players"
+
+                        $pitcherBytes = [System.Text.Encoding]::UTF8.GetBytes($pitcherJson)
+                        $response.ContentLength64 = $pitcherBytes.Length
+                        $response.OutputStream.Write($pitcherBytes, 0, $pitcherBytes.Length)
+                    } catch {
+                        Write-Host "Pitchers fetch failed: $($_.Exception.Message)"
+                        $errMsg = $_.Exception.Message -replace '"', "'"
+                        $eb = [System.Text.Encoding]::UTF8.GetBytes("{`"error`":`"$errMsg`",`"players`":[]}")
+                        $response.StatusCode = 502
+                        $response.ContentLength64 = $eb.Length
+                        $response.OutputStream.Write($eb, 0, $eb.Length)
                     }
                 }
                 $response.Close()

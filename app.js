@@ -13,11 +13,12 @@ const MLB_OFFICIAL_NAMES = new Set([
     "Diamondbacks", "Rockies", "Dodgers", "Padres", "Giants"
 ]);
 
-const ELECTRIC_STARTERS = [
-    "Skenes", "Skubal", "Yamamoto", "Crochet", "Ohtani", "Misiorowski", 
-	"deGrom", "Tong", "Yesavage", "Schlittler", "Greene", "Ragans",
-	"Sanchez"
-];
+const CUSTOM_ELECTRIC_KEY = 'mlb_custom_electric';
+
+// Populated from electric.php (top 10 by formula) + user's custom starters from localStorage
+let electricStarterIds  = new Set(); // MLB player IDs (numbers)
+let electricStarterData = [];        // [{id, name, team, k9, kbb, score}] for modal display
+let allPitcherRoster    = null;      // [{id, name, team}] loaded lazily for search
 
 const TEAM_ABBR = {
     "Orioles": "BAL", "Red Sox": "BOS", "Yankees": "NYY", "Rays": "TBR", "Blue Jays": "TOR",
@@ -136,11 +137,12 @@ async function loadEverything() {
         renderMetrics();
         renderGames();
 
-        // Phase 2.5: Apply Canadian, MLB Network, and Banana Ball broadcasts (non-blocking)
+        // Phase 2.5: Apply Canadian, MLB Network, Banana Ball, and Electric starters (non-blocking)
         fetchSportsnetGames(); // No await — runs in background
         fetchTsnGames();       // No await — runs in background
         fetchMlbNetworkGames(); // No await — runs in background
         fetchBananaBallGames(); // No await — runs in background
+        fetchElectricStarters(); // No await — runs in background
 
         // Phase 3: Fire Gemini in background (needs all enrichment data for prompt)
         const allGames = [...(gamesData.today || []), ...(gamesData.tomorrow || []), ...(gamesData.dayafter || [])];
@@ -150,13 +152,7 @@ async function loadEverything() {
     } catch (e) {
         console.error("Load error:", e);
     } finally {
-        // Footer tooltip
-        const pauly = document.getElementById('pauly-sheep');
-        if (pauly) {
-            const sortedStarters = [...ELECTRIC_STARTERS].sort((a,b) => a.localeCompare(b));
-            const listStr = sortedStarters.slice(0, -1).join(', ') + ', and ' + sortedStarters.slice(-1);
-            pauly.title = `Electric starters are ${listStr}.`;
-        }
+        // nothing — settings are opened via the gear icon in the header
     }
 }
 
@@ -168,6 +164,13 @@ function reprocessAllGames() {
         g.home.unseen = g.home.official && isTeamMatch(g.home.name);
         g.bothUnseen = g.away.unseen && g.home.unseen;
         g.anyUnseen = g.away.unseen || g.home.unseen;
+
+        // Recalculate electric status from current ID set
+        if (!g.isBananaBall) {
+            g.away.electric = !!(g.away.pitcherId && electricStarterIds.has(g.away.pitcherId));
+            g.home.electric = !!(g.home.pitcherId && electricStarterIds.has(g.home.pitcherId));
+            g.anyElectric   = g.away.electric || g.home.electric;
+        }
 
         // Recalculate fun score from scratch
         const awayFun = TEAM_FUN_SCORES[g.away.nickname] || 0;
@@ -267,6 +270,8 @@ function setupListeners() {
             }
         });
     }
+
+    document.getElementById('settings-btn')?.addEventListener('click', openElectricModal);
 
     // Event delegation for toggling team seen state
     dom.divisionsContainer.addEventListener('dblclick', (e) => {
@@ -543,11 +548,13 @@ function processGame(game) {
     const awayUnseen = awayOfficial && isTeamMatch(away);
     const homeUnseen = homeOfficial && isTeamMatch(home);
     
-    const awaySP = game.teams.away.probablePitcher?.fullName || 'TBD';
-    const homeSP = game.teams.home.probablePitcher?.fullName || 'TBD';
+    const awaySP        = game.teams.away.probablePitcher?.fullName || 'TBD';
+    const homeSP        = game.teams.home.probablePitcher?.fullName || 'TBD';
+    const awayPitcherId = game.teams.away.probablePitcher?.id ?? null;
+    const homePitcherId = game.teams.home.probablePitcher?.id ?? null;
 
-    const isElectricAway = ELECTRIC_STARTERS.some(name => awaySP.includes(name));
-    const isElectricHome = ELECTRIC_STARTERS.some(name => homeSP.includes(name));
+    const isElectricAway = !!(awayPitcherId && electricStarterIds.has(awayPitcherId));
+    const isElectricHome = !!(homePitcherId && electricStarterIds.has(homePitcherId));
 
     let featuredNetworks = [];
     let allNetworks = [];
@@ -611,8 +618,8 @@ function processGame(game) {
         location: game.venue.name,
         funScore: gameFunScore,
         isHighFun: gameFunScore >= 8,
-        away: { name: away, nickname: awayNickname, unseen: awayUnseen, official: awayOfficial, sp: awaySP, electric: isElectricAway },
-        home: { name: home, nickname: homeNickname, unseen: homeUnseen, official: homeOfficial, sp: homeSP, electric: isElectricHome },
+        away: { name: away, nickname: awayNickname, unseen: awayUnseen, official: awayOfficial, sp: awaySP, pitcherId: awayPitcherId, electric: isElectricAway },
+        home: { name: home, nickname: homeNickname, unseen: homeUnseen, official: homeOfficial, sp: homeSP, pitcherId: homePitcherId, electric: isElectricHome },
         bothUnseen: awayUnseen && homeUnseen,
         anyUnseen: awayUnseen || homeUnseen,
         anyElectric: isElectricAway || isElectricHome,
@@ -1364,6 +1371,250 @@ async function fetchBananaBallGames() {
     } catch (e) {
         console.warn('[Bananas] Integration skipped:', e);
     }
+}
+
+// ── Electric Starters ────────────────────────────────────────────────────────
+
+async function fetchElectricStarters() {
+    try {
+        const res = await fetch('electric.php');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.players) throw new Error('No players in response');
+
+        electricStarterData = data.players;
+
+        // Rebuild ID set: formula top-10 + custom
+        electricStarterIds = new Set();
+        electricStarterData.forEach(p => electricStarterIds.add(p.id));
+
+        const custom = loadCustomElectricStarters();
+        custom.forEach(p => electricStarterIds.add(p.id));
+
+        reprocessAllGames();
+        renderGames();
+        renderSidebar();
+        console.log(`[Electric] Loaded ${electricStarterData.length} formula starters + ${custom.length} custom`);
+    } catch (e) {
+        console.warn('[Electric] Skipped:', e);
+    }
+}
+
+function loadCustomElectricStarters() {
+    try {
+        return JSON.parse(localStorage.getItem(CUSTOM_ELECTRIC_KEY) || '[]');
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveCustomElectricStarters(list) {
+    localStorage.setItem(CUSTOM_ELECTRIC_KEY, JSON.stringify(list));
+}
+
+function rebuildElectricIds() {
+    electricStarterIds = new Set();
+    electricStarterData.forEach(p => electricStarterIds.add(p.id));
+    loadCustomElectricStarters().forEach(p => electricStarterIds.add(p.id));
+    reprocessAllGames();
+    renderGames();
+    renderSidebar();
+}
+
+// ── Electric Modal ────────────────────────────────────────────────────────────
+
+function openElectricModal() {
+    const modal = document.getElementById('electric-modal');
+    if (!modal) return;
+    renderElectricModal();
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    document.getElementById('pitcher-search-input')?.focus();
+}
+
+function closeElectricModal() {
+    const modal = document.getElementById('electric-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    hidePitcherDropdown();
+}
+
+function renderElectricModal() {
+    const body = document.getElementById('electric-modal-body');
+    if (!body) return;
+
+    const custom = loadCustomElectricStarters();
+
+    const tableRows = electricStarterData.length
+        ? electricStarterData.map((p, i) => `
+            <tr>
+                <td class="em-rank">${i + 1}</td>
+                <td class="em-name">${escapeHTML(p.name)}</td>
+                <td class="em-team">${escapeHTML(p.team)}</td>
+                <td class="em-stat">${p.k9.toFixed(2)}</td>
+                <td class="em-stat">${p.kbb.toFixed(2)}</td>
+                <td class="em-score">${p.score.toFixed(2)}</td>
+            </tr>`).join('')
+        : '<tr><td colspan="6" class="em-loading">Loading…</td></tr>';
+
+    const customChips = custom.length
+        ? custom.map(p => `
+            <div class="custom-chip" data-id="${p.id}">
+                <span>${escapeHTML(p.name)}</span>
+                <span class="em-team-small">${escapeHTML(p.team)}</span>
+                <button class="custom-chip-remove" data-id="${p.id}" title="Remove">×</button>
+            </div>`).join('')
+        : '<p class="em-empty">No custom starters yet.</p>';
+
+    body.innerHTML = `
+        <div class="settings-section-title">
+            <span class="material-icons" style="font-size:16px;color:var(--accent-gold);vertical-align:middle;margin-right:5px">bolt</span>
+            Electric Starters
+        </div>
+        <table class="electric-modal-table">
+            <thead>
+                <tr>
+                    <th>#</th><th>Pitcher</th><th>Team</th>
+                    <th title="Strikeouts per 9 innings">K/9</th>
+                    <th title="Strikeout-to-walk ratio">K/BB</th>
+                    <th title="Electric Score = (K/9 pct × 1.3) + K/BB pct">Score</th>
+                </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+        </table>
+        <div class="em-custom-section">
+            <div class="em-custom-title">Custom Starters</div>
+            <div id="custom-chips-list">${customChips}</div>
+            <div class="pitcher-search-wrap">
+                <input type="text" id="pitcher-search-input" placeholder="Search pitchers to add…" autocomplete="off">
+                <div id="pitcher-search-results" class="pitcher-dropdown" style="display:none"></div>
+            </div>
+        </div>`;
+
+    body.querySelectorAll('.custom-chip-remove').forEach(btn => {
+        btn.addEventListener('click', () => removeCustomStarter(Number(btn.dataset.id)));
+    });
+
+    const searchInput = body.querySelector('#pitcher-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', onPitcherSearchInput);
+        searchInput.addEventListener('keydown', onPitcherSearchKeydown);
+    }
+}
+
+let _pitcherHighlightIndex = -1;
+
+function onPitcherSearchInput(e) {
+    const q = e.target.value.trim();
+    if (q.length < 2) { hidePitcherDropdown(); return; }
+    showPitcherResults(q);
+}
+
+function onPitcherSearchKeydown(e) {
+    const dd = document.getElementById('pitcher-search-results');
+    if (!dd || dd.style.display === 'none') return;
+    const items = dd.querySelectorAll('.pitcher-result-item');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _pitcherHighlightIndex = Math.min(_pitcherHighlightIndex + 1, items.length - 1);
+        highlightPitcherResult(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _pitcherHighlightIndex = Math.max(_pitcherHighlightIndex - 1, 0);
+        highlightPitcherResult(items);
+    } else if (e.key === 'Enter' && _pitcherHighlightIndex >= 0) {
+        e.preventDefault();
+        items[_pitcherHighlightIndex]?.click();
+    } else if (e.key === 'Escape') {
+        hidePitcherDropdown();
+    }
+}
+
+function highlightPitcherResult(items) {
+    items.forEach((el, i) => el.classList.toggle('highlighted', i === _pitcherHighlightIndex));
+    items[_pitcherHighlightIndex]?.scrollIntoView({ block: 'nearest' });
+}
+
+async function showPitcherResults(query) {
+    if (!allPitcherRoster) {
+        try {
+            const res = await fetch('pitchers.php');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            allPitcherRoster = data.players || [];
+        } catch (e) {
+            console.warn('[Pitchers] Could not load roster:', e);
+            return;
+        }
+    }
+
+    const q = query.toLowerCase();
+    const customIds = new Set(loadCustomElectricStarters().map(p => p.id));
+    const formulaIds = new Set(electricStarterData.map(p => p.id));
+
+    const matches = allPitcherRoster
+        .filter(p => p.name.toLowerCase().includes(q))
+        .slice(0, 10);
+
+    if (matches.length === 0) { hidePitcherDropdown(); return; }
+
+    const dd = document.getElementById('pitcher-search-results');
+    const input = document.getElementById('pitcher-search-input');
+    if (!dd || !input) return;
+    _pitcherHighlightIndex = -1;
+
+    // Position fixed dropdown below the input, escaping the modal's overflow container
+    const rect = input.getBoundingClientRect();
+    dd.style.top   = (rect.bottom + 4) + 'px';
+    dd.style.left  = rect.left + 'px';
+    dd.style.width = rect.width + 'px';
+
+    dd.innerHTML = matches.map(p => {
+        const alreadyCustom = customIds.has(p.id);
+        const isFormula     = formulaIds.has(p.id);
+        const tag = alreadyCustom ? ' <span class="em-tag-custom">custom</span>'
+                  : isFormula     ? ' <span class="em-tag-formula">top 10</span>'
+                  : '';
+        return `<div class="pitcher-result-item${alreadyCustom ? ' already-added' : ''}"
+                     data-id="${p.id}" data-name="${escapeHTML(p.name)}" data-team="${escapeHTML(p.team)}">
+                    <span class="pr-name">${escapeHTML(p.name)}</span>
+                    <span class="pr-team">${escapeHTML(p.team)}</span>${tag}
+                </div>`;
+    }).join('');
+
+    dd.style.display = 'block';
+
+    dd.querySelectorAll('.pitcher-result-item:not(.already-added)').forEach(el => {
+        el.addEventListener('click', () => {
+            addCustomStarter({ id: Number(el.dataset.id), name: el.dataset.name, team: el.dataset.team });
+            const input = document.getElementById('pitcher-search-input');
+            if (input) input.value = '';
+            hidePitcherDropdown();
+        });
+    });
+}
+
+function hidePitcherDropdown() {
+    const dd = document.getElementById('pitcher-search-results');
+    if (dd) dd.style.display = 'none';
+    _pitcherHighlightIndex = -1;
+}
+
+function addCustomStarter(pitcher) {
+    const list = loadCustomElectricStarters();
+    if (list.some(p => p.id === pitcher.id)) return; // already there
+    list.push(pitcher);
+    saveCustomElectricStarters(list);
+    rebuildElectricIds();
+    renderElectricModal();
+}
+
+function removeCustomStarter(id) {
+    const list = loadCustomElectricStarters().filter(p => p.id !== id);
+    saveCustomElectricStarters(list);
+    rebuildElectricIds();
+    renderElectricModal();
 }
 
 document.addEventListener('DOMContentLoaded', init);

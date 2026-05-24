@@ -17,6 +17,9 @@ While built for personal use, it's also a great way for any fan to see what inte
 - **Priority Filtering**: Filter for "Top Priority" games where both teams are unseen.
 - **Gemini AI Recommendations**: Uses AI to automatically identify and showcase 5 compelling games across the 3-day window.
 - **Showcase Toast Notifications**: Visual confirmation when AI recommendations load or encounter errors.
+- **Dynamic Electric Starters**: Automatically calculates the top 10 "electric" starting pitchers each day using a K/9 and K/BB percentile formula. Pitchers with at least 3 game starts qualify. Results are matched to probable starters by MLB player ID (not name), so accented names and common surnames match correctly.
+- **Custom Starters**: A Settings panel (gear icon) lets you add your own pitchers to follow alongside the formula top 10. Custom starters are saved in browser storage and matched by MLB player ID via a searchable roster.
+- **Banana Ball Games**: Savannah Bananas games broadcast on YouTube are injected into the 3-day schedule as separate cards, marked with a banana icon. Times are converted to Eastern from local venue timezone.
 - **Metrics Shelf**: Visual representation of your season progress.
 - **Material Icons**: Clean, consistent UI using Material Design iconography.
 - **Mobile Responsive**: Designed to look great on any device.
@@ -45,6 +48,11 @@ The application integrates data from multiple real-time sources to calculate the
 - **Banana Ball (Savannah Bananas)**:
   - `bananas.php`: Scrapes the Savannah Bananas schedule page and returns games broadcast on YouTube within the next 14 days. Times are converted from local venue timezone (PST/CST/EST) to Eastern. Caches results for 4 hours. Banana Ball games are injected into the 3-day schedule as separate cards marked with a 🍌 yellow banana icon and bypass MLB-specific filters (fun score, unseen status, etc.).
 
+- **Dynamic Electric Starters**:
+  - `electric.php`: Fetches all pitchers with at least 3 game starts (`playerPool=All`, GS≥3) from the MLB Stats API. Calculates an Electric Score for each: `(K/9 percentile × 1.3) + K/BB percentile`. Returns the top 10 by score. Caches daily.
+  - `pitchers.php`: Returns all pitchers with any season stats as `{id, name, team}` for use in the Settings modal autocomplete. Caches daily.
+  - Electric starter detection uses MLB player IDs (not name strings), so accented names and common surnames never cause false matches or misses.
+
 ## 🔗 URL Parameters
 
 You can customize the application state using the following parameters:
@@ -58,7 +66,7 @@ You can customize the application state using the following parameters:
 ## 🛠️ Tech Stack
 
 - **Frontend**: Vanilla HTML5, JavaScript (ES6+), CSS3.
-- **Backend Proxy**: PHP (`index.php` for session/CSRF token seeding; `gemini.php`, `sportsnet.php`, `tsn.php`, `mlbnetwork.php` for proxying external APIs; `token.php` as a shared auth helper). PowerShell (`server.ps1`) for local development.
+- **Backend Proxy**: PHP (`index.php` for session/CSRF token seeding; `gemini.php`, `sportsnet.php`, `tsn.php`, `mlbnetwork.php`, `electric.php`, `pitchers.php` for proxying external APIs; `token.php` as a shared auth helper). PowerShell (`server.ps1`) for local development.
 - **Data Source**: MLB Stats API, Google Gemini API.
 - **Icons**: [Material Icons](https://fonts.google.com/icons)
 
