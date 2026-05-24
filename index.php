@@ -168,14 +168,5 @@ $csrf_token = csrf_generate();
     <script>window.CSRF_TOKEN = '<?= htmlspecialchars($csrf_token, ENT_QUOTES, 'UTF-8') ?>';</script>
     <script src="featured-events.js"></script>
     <script src="app.js"></script>
-    <script>
-        document.getElementById('electric-modal-close').addEventListener('click', closeElectricModal);
-        document.getElementById('electric-modal').addEventListener('click', function(e) {
-            if (e.target === this) closeElectricModal();
-        });
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeElectricModal();
-        });
-    </script>
 </body>
 </html>

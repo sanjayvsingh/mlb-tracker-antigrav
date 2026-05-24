@@ -272,6 +272,13 @@ function setupListeners() {
     }
 
     document.getElementById('settings-btn')?.addEventListener('click', openElectricModal);
+    document.getElementById('electric-modal-close')?.addEventListener('click', closeElectricModal);
+    document.getElementById('electric-modal')?.addEventListener('click', function(e) {
+        if (e.target === this) closeElectricModal();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeElectricModal();
+    });
 
     // Event delegation for toggling team seen state
     dom.divisionsContainer.addEventListener('dblclick', (e) => {
