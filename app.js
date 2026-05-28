@@ -1507,6 +1507,19 @@ function renderElectricModal() {
         }).join('')
         : '<p class="em-empty">No custom starters yet.</p>';
 
+    const hotBatsList = [];
+    hotHitters.forEach((players, teamNick) => {
+        players.forEach(p => hotBatsList.push({ name: p.name, team: teamNick, stat: p.stat }));
+    });
+    const hotBatsRows = hotBatsList.length
+        ? hotBatsList.map(p => `
+            <tr>
+                <td class="em-name">${escapeHTML(p.name)}</td>
+                <td class="em-team">${escapeHTML(p.team)}</td>
+                <td class="em-stat em-hot-stat">${escapeHTML(p.stat)}</td>
+            </tr>`).join('')
+        : '<tr><td colspan="3" class="em-loading">Loading…</td></tr>';
+
     body.innerHTML = `
         <div class="settings-section-title">
             <span class="material-icons" style="font-size:16px;color:var(--accent-gold);vertical-align:middle;margin-right:5px">bolt</span>
@@ -1523,6 +1536,18 @@ function renderElectricModal() {
             </thead>
             <tbody>${tableRows}</tbody>
         </table>
+        <div class="em-hot-bats-section">
+            <div class="settings-section-title">
+                <span class="material-icons" style="font-size:16px;color:var(--accent-blue);vertical-align:middle;margin-right:5px">local_fire_department</span>
+                Hot Bats
+            </div>
+            <table class="electric-modal-table">
+                <thead>
+                    <tr><th>Player</th><th>Team</th><th>Stat</th></tr>
+                </thead>
+                <tbody>${hotBatsRows}</tbody>
+            </table>
+        </div>
         <div class="em-custom-section">
             <div class="em-custom-title">Custom Starters</div>
             <div id="custom-chips-list">${customChips}</div>

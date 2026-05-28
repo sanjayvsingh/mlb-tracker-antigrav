@@ -326,6 +326,10 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .em-loading { color: var(--text-muted); font-style: italic; text-align: center; padding: 1rem 0; }
 .em-empty { color: var(--text-muted); font-size: 0.82rem; font-style: italic; margin-bottom: 0.75rem; }
 
+/* HOT BATS SECTION */
+.em-hot-bats-section { border-top: 1px solid var(--border-main); padding-top: 1rem; margin-top: 0.25rem; }
+.em-hot-stat { text-align: right; color: var(--accent-blue); font-weight: 600; }
+
 /* CUSTOM STARTERS SECTION */
 .em-custom-section { border-top: 1px solid var(--border-main); padding-top: 1rem; }
 .em-custom-title {
