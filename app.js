@@ -184,7 +184,7 @@ function reprocessAllGames() {
         const awayHH = (hotHitters.get(g.away.nickname) || []).map(h => ({...h, team: g.away.nickname}));
         const homeHH = (hotHitters.get(g.home.nickname) || []).map(h => ({...h, team: g.home.nickname}));
         g.hotHitterInfo = [...awayHH, ...homeHH];
-        score += g.hotHitterInfo.length;
+        score += g.hotHitterInfo.reduce((sum, h) => sum + hotHitterBonus(h), 0);
 
         // Milestones
         const awayMS = (milestoneWatch.get(g.away.nickname) || []).map(m => ({...m, team: g.away.nickname}));
@@ -195,8 +195,8 @@ function reprocessAllGames() {
         // Showcase bonus (preserve if already applied)
         if (g.isShowcase) score += 1;
 
-        g.funScore = score;
-        g.isHighFun = score >= 8;
+        g.funScore = Math.ceil(score);
+        g.isHighFun = Math.ceil(score) >= 8;
     });
 
     // Update allTeamsDetailed unseen status to match
@@ -381,6 +381,11 @@ function loadStaticTeams() {
             });
         });
     }
+}
+
+// +1 for primary category, +0.5 per additional category
+function hotHitterBonus(h) {
+    return 1 + ((h.extras?.length || 0) * 0.5);
 }
 
 // 2.5 Hot Hitters & Milestone Watch
@@ -605,11 +610,11 @@ function processGame(game) {
     if (isElectricAway) gameFunScore += 1;
     if (isElectricHome) gameFunScore += 1;
 
-    // Hot Hitters bonus (+1 per unique hot hitter in this game)
+    // Hot Hitters bonus (+1 primary category, +0.5 per additional category, ceiling total)
     const awayHotHitters = (hotHitters.get(awayNickname) || []).map(h => ({...h, team: awayNickname}));
     const homeHotHitters = (hotHitters.get(homeNickname) || []).map(h => ({...h, team: homeNickname}));
     const allGameHotHitters = [...awayHotHitters, ...homeHotHitters];
-    gameFunScore += allGameHotHitters.length;
+    gameFunScore += allGameHotHitters.reduce((sum, h) => sum + hotHitterBonus(h), 0);
 
     // Milestone Watch bonus (+2 per milestone player in this game)
     const awayMilestones = (milestoneWatch.get(awayNickname) || []).map(m => ({...m, team: awayNickname}));
@@ -621,7 +626,7 @@ function processGame(game) {
         id: game.gamePk,
         date: new Date(game.gameDate),
         location: game.venue.name,
-        funScore: gameFunScore,
+        funScore: Math.ceil(gameFunScore),
         isHighFun: gameFunScore >= 8,
         away: { name: away, nickname: awayNickname, unseen: awayUnseen, official: awayOfficial, sp: awaySP, pitcherId: awayPitcherId, electric: isElectricAway },
         home: { name: home, nickname: homeNickname, unseen: homeUnseen, official: homeOfficial, sp: homeSP, pitcherId: homePitcherId, electric: isElectricHome },
@@ -824,17 +829,20 @@ function renderGames() {
                 const awayScore = TEAM_FUN_SCORES[g.away.nickname] || 0;
                 const homeScore = TEAM_FUN_SCORES[g.home.nickname] || 0;
                 const electric = (g.away.electric ? 1 : 0) + (g.home.electric ? 1 : 0);
-                const hotBonus = g.hotHitterInfo.length;
+                const hotBonus = g.hotHitterInfo.reduce((sum, h) => sum + hotHitterBonus(h), 0);
                 const milestoneBonus = g.milestoneInfo.length * 2;
                 if (awayScore > 0) components.push(`${awayScore} ${g.away.nickname}`);
                 if (homeScore > 0) components.push(`${homeScore} ${g.home.nickname}`);
                 if (electric > 0) components.push(`+${electric} Electric starter`);
-                if (hotBonus > 0) components.push(`+${hotBonus} Hot hitters`);
+                if (hotBonus > 0) components.push(`+${hotBonus % 1 === 0 ? hotBonus : hotBonus.toFixed(1)} Hot hitters`);
                 if (milestoneBonus > 0) components.push(`+${milestoneBonus} Milestones`);
                 if (g.isShowcase) components.push(`+1 Showcase game`);
                 return `Fun score: ${g.funScore}${components.length > 0 ? ` (${components.join(', ')})` : ''}`;
             })();
-            const hotHitterTooltip = g.hotHitterInfo.map(h => `${h.name} (${h.stat})`).join(', ');
+            const hotHitterTooltip = g.hotHitterInfo.map(h => {
+                const allStats = [h.stat, ...(h.extras || [])].join(' · ');
+                return `${h.name} (${allStats})`;
+            }).join(', ');
             const milestoneTooltip = g.milestoneInfo.map(m => m.description).join(' • ');
             badgesHtml = [
                 `<div class="badge fun-badge" title="${escapeHTML(funTooltip)}"><span class="material-icons" style="color: inherit; font-size: 14px; vertical-align: middle; margin-right: 2px;">diamond</span>${escapeHTML(g.funScore)}</div>`,
@@ -941,7 +949,7 @@ async function applyGeminiRecommendations(gamesList) {
         };
         const hh = hotHitters.get(t.name);
         if (hh && hh.length > 0) {
-            ctx.hot = hh.map(h => `${h.name} (${h.stat})`);
+            ctx.hot = hh.map(h => `${h.name} (${[h.stat, ...(h.extras || [])].join(', ')}`);
         }
         const ms = milestoneWatch.get(t.name);
         if (ms && ms.length > 0) {
