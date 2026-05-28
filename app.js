@@ -1518,7 +1518,7 @@ function renderElectricModal() {
     const STAT_ORDER = { 'HR': 0, 'SLG': 1, 'OPS': 2 };
     const hotBatsList = [];
     hotHitters.forEach((players, teamNick) => {
-        players.forEach(p => hotBatsList.push({ name: p.name, team: teamNick, stat: p.stat }));
+        players.forEach(p => hotBatsList.push({ ...p, team: teamNick }));
     });
     hotBatsList.sort((a, b) => {
         const suffixA = a.stat.split(' ').pop();
