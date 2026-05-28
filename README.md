@@ -1,6 +1,6 @@
 # MLB Tracker
 
-A real-time baseball game tracker designed to help you catch the games that matter most.  First and foremost, Jeter sucks.
+A real-time baseball game tracker designed to help you catch the games that matter most.
 
 ## 🚀 Project Overview
 
