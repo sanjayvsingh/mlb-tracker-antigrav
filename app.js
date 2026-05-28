@@ -411,9 +411,13 @@ async function fetchHotHittersAndMilestones() {
                 } else {
                     statLabel = `${parseFloat(rawVal).toFixed(3).replace(/^0/, '')} OPS`;
                 }
-                // Avoid duplicate player entries across categories
+                // Deduplicate across categories; track extra categories on the primary entry
                 const existing = hotHitters.get(nickname);
-                if (!existing.some(h => h.name === leader.person.fullName)) {
+                const entry = existing.find(h => h.name === leader.person.fullName);
+                if (entry) {
+                    if (!entry.extras) entry.extras = [];
+                    entry.extras.push(statLabel);
+                } else {
                     existing.push({ name: leader.person.fullName, stat: statLabel });
                 }
             });
@@ -1520,12 +1524,17 @@ function renderElectricModal() {
         return parseFloat(b.stat) - parseFloat(a.stat);
     });
     const hotBatsRows = hotBatsList.length
-        ? hotBatsList.map(p => `
+        ? hotBatsList.map(p => {
+            const extras = (p.extras || []).map(e =>
+                `<span class="em-hot-extra">+${e.split(' ').pop()}</span>`
+            ).join('');
+            return `
             <tr>
-                <td class="em-name">${escapeHTML(p.name)}</td>
+                <td class="em-name">${escapeHTML(p.name)}${extras}</td>
                 <td class="em-team">${escapeHTML(p.team)}</td>
                 <td class="em-stat em-hot-stat">${escapeHTML(p.stat)}</td>
-            </tr>`).join('')
+            </tr>`;
+        }).join('')
         : '<tr><td colspan="3" class="em-loading">Loading…</td></tr>';
 
     body.innerHTML = `
