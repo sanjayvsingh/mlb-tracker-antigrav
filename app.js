@@ -397,7 +397,11 @@ async function fetchHotHittersAndMilestones() {
         const url = `${STATS_API_BASE}/stats/leaders?leaderCategories=homeRuns,sluggingPercentage,onBasePlusSlugging&statGroup=hitting&limit=${leaderLimit}&season=${year}`;
         const TTL_12H = 12 * 60 * 60 * 1000;
         const data = await fetchJSONWithCache(url, TTL_12H);
-        (data.leagueLeaders || []).forEach(cat => {
+        const CAT_PRIORITY = { homeRuns: 0, sluggingPercentage: 1, onBasePlusSlugging: 2 };
+        const sortedLeaders = [...(data.leagueLeaders || [])].sort((a, b) =>
+            (CAT_PRIORITY[a.leaderCategory] ?? 9) - (CAT_PRIORITY[b.leaderCategory] ?? 9)
+        );
+        sortedLeaders.forEach(cat => {
             (cat.leaders || []).forEach(leader => {
                 const nickname = findNicknameFromApiName(leader.team?.name);
                 if (!nickname) return;
