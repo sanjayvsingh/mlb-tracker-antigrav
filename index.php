@@ -127,16 +127,6 @@ $csrf_token = csrf_generate();
                 <div class="divisions-container" id="divisions-container">
                     <div class="loading-state">Loading standings...</div>
                 </div>
-                <div class="sidebar-footer" style="padding: 16px; display: flex; gap: 8px; border-top: 1px solid var(--border-color);">
-                    <button id="share-link-btn" class="filter-btn" style="flex: 1; justify-content: center; background-color: var(--surface-light); border: 1px solid var(--border-color);">
-                        <span class="material-icons" style="font-size: 18px; color: var(--text-muted); margin-right: 6px; vertical-align: middle;">share</span>
-                        <span class="filter-text" style="font-weight: 500; vertical-align: middle;">Share</span>
-                    </button>
-                    <button id="reset-btn" class="filter-btn" style="flex: 1; justify-content: center; background-color: var(--surface-light); border: 1px solid var(--border-color);">
-                        <span class="material-icons" style="font-size: 18px; color: var(--text-muted); margin-right: 6px; vertical-align: middle;">refresh</span>
-                        <span class="filter-text" style="font-weight: 500; vertical-align: middle;">Reset</span>
-                    </button>
-                </div>
             </aside>
         </div>
         <footer class="app-footer">
