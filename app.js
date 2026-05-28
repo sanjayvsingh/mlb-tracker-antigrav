@@ -308,26 +308,32 @@ async function fetchSavedTeams() {
     
     // Rule 1: Shared Links (?seen=)
     if (seenParam !== null) {
-        const seenList = seenParam.split(',').map(s => {
-            const code = s.trim().toUpperCase();
-            return (ABBR_TO_TEAM[code] || s.trim()).toLowerCase();
-        });
-        myUnseenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !seenList.includes(t.toLowerCase()));
-
-        if (!isOwner) {
-            localStorage.setItem('mlbTrackerSeen', JSON.stringify(seenList));
-            const electricParam = urlParams.get('electric');
-            if (electricParam) {
-                const sharedIds = electricParam.split(',').map(s => parseInt(s.trim(), 10)).filter(id => !isNaN(id));
-                if (sharedIds.length > 0) {
-                    await applySharedElectricStarters(sharedIds);
-                }
+        // Electric starters from a share link apply to everyone, including owners
+        const electricParam = urlParams.get('electric');
+        if (electricParam) {
+            const sharedIds = electricParam.split(',').map(s => parseInt(s.trim(), 10)).filter(id => !isNaN(id));
+            if (sharedIds.length > 0) {
+                await applySharedElectricStarters(sharedIds);
             }
         }
         urlParams.delete('seen');
         urlParams.delete('electric');
         const newUrl = window.location.origin + window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
         window.history.replaceState({}, document.title, newUrl);
+
+        if (isOwner) {
+            // Owners ignore the shared seen list — games always come from the Google Sheet
+            await fetchGoogleSheet();
+            return;
+        }
+
+        // Non-owners: apply the shared seen list
+        const seenList = seenParam.split(',').map(s => {
+            const code = s.trim().toUpperCase();
+            return (ABBR_TO_TEAM[code] || s.trim()).toLowerCase();
+        });
+        myUnseenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !seenList.includes(t.toLowerCase()));
+        localStorage.setItem('mlbTrackerSeen', JSON.stringify(seenList));
         return;
     }
     
