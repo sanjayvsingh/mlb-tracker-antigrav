@@ -1441,7 +1441,7 @@ async function applySharedElectricStarters(ids) {
     try {
         const res = await fetch('pitchers.php', { headers: { 'X-CSRF-Token': window.CSRF_TOKEN } });
         const data = await res.json();
-        const roster = Array.isArray(data) ? data : (data.pitchers || []);
+        const roster = Array.isArray(data) ? data : (data.players || data.pitchers || []);
         const rosterMap = new Map(roster.map(p => [Number(p.id), p]));
         const existing = loadCustomElectricStarters();
         const existingIds = new Set(existing.map(p => p.id));
