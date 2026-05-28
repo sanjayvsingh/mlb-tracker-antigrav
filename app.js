@@ -247,31 +247,6 @@ function setupListeners() {
         renderGames();
     });
 
-    const shareBtn = document.getElementById('share-link-btn');
-    if (shareBtn) {
-        shareBtn.addEventListener('click', () => {
-            const seenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !myUnseenTeams.some(u => u.toLowerCase() === t.toLowerCase()));
-            const seenCodes = seenTeams.map(t => TEAM_ABBR[t] || t);
-            // Manually construct the URL to keep literal commas instead of %2C
-            const urlStr = `${window.location.origin}${window.location.pathname}?seen=${seenCodes.join(',')}`;
-            navigator.clipboard.writeText(urlStr).then(() => {
-                const originalHtml = shareBtn.innerHTML;
-                shareBtn.innerHTML = '<span class="material-icons" style="font-size: 18px; color: var(--accent-green); margin-right: 6px; vertical-align: middle;">check</span> <span class="filter-text" style="font-weight: 500; vertical-align: middle;">Copied!</span>';
-                setTimeout(() => shareBtn.innerHTML = originalHtml, 2000);
-            });
-        });
-    }
-
-    const resetBtn = document.getElementById('reset-btn');
-    if (resetBtn) {
-        resetBtn.addEventListener('click', () => {
-            if (confirm("Clear all locally saved progress and tracking?")) {
-                localStorage.clear();
-                window.location.href = window.location.origin + window.location.pathname;
-            }
-        });
-    }
-
     document.getElementById('settings-btn')?.addEventListener('click', openElectricModal);
     document.getElementById('electric-modal-close')?.addEventListener('click', closeElectricModal);
     document.getElementById('electric-modal')?.addEventListener('click', function(e) {
@@ -338,11 +313,19 @@ async function fetchSavedTeams() {
             return (ABBR_TO_TEAM[code] || s.trim()).toLowerCase();
         });
         myUnseenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !seenList.includes(t.toLowerCase()));
-        
+
         if (!isOwner) {
             localStorage.setItem('mlbTrackerSeen', JSON.stringify(seenList));
+            const electricParam = urlParams.get('electric');
+            if (electricParam) {
+                const sharedIds = electricParam.split(',').map(s => parseInt(s.trim(), 10)).filter(id => !isNaN(id));
+                if (sharedIds.length > 0) {
+                    await applySharedElectricStarters(sharedIds);
+                }
+            }
         }
         urlParams.delete('seen');
+        urlParams.delete('electric');
         const newUrl = window.location.origin + window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
         window.history.replaceState({}, document.title, newUrl);
         return;
@@ -1435,6 +1418,38 @@ function rebuildElectricIds() {
     renderSidebar();
 }
 
+// ── Sharing ───────────────────────────────────────────────────────────────────
+
+function buildShareUrl() {
+    const seenTeams = [...MLB_OFFICIAL_NAMES].filter(t => !myUnseenTeams.some(u => u.toLowerCase() === t.toLowerCase()));
+    const seenCodes = seenTeams.map(t => TEAM_ABBR[t] || t);
+    let url = `${window.location.origin}${window.location.pathname}?seen=${seenCodes.join(',')}`;
+    const customIds = loadCustomElectricStarters().map(p => p.id);
+    if (customIds.length > 0) {
+        url += `&electric=${customIds.join(',')}`;
+    }
+    return url;
+}
+
+async function applySharedElectricStarters(ids) {
+    try {
+        const res = await fetch('pitchers.php', { headers: { 'X-CSRF-Token': window.CSRF_TOKEN } });
+        const data = await res.json();
+        const roster = Array.isArray(data) ? data : (data.pitchers || []);
+        const rosterMap = new Map(roster.map(p => [Number(p.id), p]));
+        const existing = loadCustomElectricStarters();
+        const existingIds = new Set(existing.map(p => p.id));
+        let changed = false;
+        ids.forEach(id => {
+            if (!existingIds.has(id) && rosterMap.has(id)) {
+                existing.push(rosterMap.get(id));
+                changed = true;
+            }
+        });
+        if (changed) saveCustomElectricStarters(existing);
+    } catch(e) { /* non-critical */ }
+}
+
 // ── Electric Modal ────────────────────────────────────────────────────────────
 
 function openElectricModal() {
@@ -1509,6 +1524,20 @@ function renderElectricModal() {
                 <input type="text" id="pitcher-search-input" placeholder="Search pitchers to add…" autocomplete="off">
                 <div id="pitcher-search-results" class="pitcher-dropdown" style="display:none"></div>
             </div>
+        </div>
+        <div class="em-sharing-section">
+            <div class="settings-section-title" style="margin-bottom:0.5rem">
+                <span class="material-icons" style="font-size:16px;color:var(--text-muted);vertical-align:middle;margin-right:5px">ios_share</span>
+                Sharing
+            </div>
+            <div class="em-sharing-row">
+                <button id="modal-share-btn" class="em-action-btn">
+                    <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:5px">share</span>Share My List
+                </button>
+                <button id="modal-reset-btn" class="em-action-btn em-action-btn--danger">
+                    <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:5px">refresh</span>Reset Progress
+                </button>
+            </div>
         </div>`;
 
     body.querySelectorAll('.custom-chip-remove').forEach(btn => {
@@ -1519,6 +1548,28 @@ function renderElectricModal() {
     if (searchInput) {
         searchInput.addEventListener('input', onPitcherSearchInput);
         searchInput.addEventListener('keydown', onPitcherSearchKeydown);
+    }
+
+    const shareBtn = body.querySelector('#modal-share-btn');
+    if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+            const url = buildShareUrl();
+            navigator.clipboard.writeText(url).then(() => {
+                const orig = shareBtn.innerHTML;
+                shareBtn.innerHTML = '<span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:5px;color:var(--accent-green)">check</span>Copied!';
+                setTimeout(() => shareBtn.innerHTML = orig, 2000);
+            });
+        });
+    }
+
+    const resetBtn = body.querySelector('#modal-reset-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            if (confirm('Clear all locally saved progress and tracking?')) {
+                localStorage.clear();
+                window.location.href = window.location.origin + window.location.pathname;
+            }
+        });
     }
 }
 
