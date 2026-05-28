@@ -14,8 +14,8 @@ try {
             $response = $context.Response
             
             $localPath = $context.Request.Url.LocalPath.TrimStart('/')
-            if ([string]::IsNullOrEmpty($localPath)) {
-                $localPath = "index.html"
+            if ([string]::IsNullOrEmpty($localPath) -or $localPath -eq 'index.html') {
+                $localPath = "index.php"
             }
             
             if ($context.Request.HttpMethod -eq 'OPTIONS') {
@@ -845,6 +845,22 @@ try {
                         $response.OutputStream.Write($eb, 0, $eb.Length)
                     }
                 }
+                $response.Close()
+                continue
+            }
+
+            # Serve index.php by stripping PHP tags and injecting a local CSRF token
+            if ($localPath -eq 'index.php') {
+                $response.ContentType = "text/html"
+                $phpFile = Join-Path $PSScriptRoot "index.php"
+                $html = [System.IO.File]::ReadAllText($phpFile, [System.Text.Encoding]::UTF8)
+                # Remove the opening <?php ... ?> block
+                $html = [regex]::Replace($html, '(?s)<\?php.*?\?>\s*', '')
+                # Replace the CSRF echo with a static local token
+                $html = $html -replace "<\?=\s*htmlspecialchars\([^)]+\)\s*\?>", 'local-dev-token'
+                $bytes = [System.Text.Encoding]::UTF8.GetBytes($html)
+                $response.ContentLength64 = $bytes.Length
+                $response.OutputStream.Write($bytes, 0, $bytes.Length)
                 $response.Close()
                 continue
             }
