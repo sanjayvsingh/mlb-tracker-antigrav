@@ -1507,9 +1507,17 @@ function renderElectricModal() {
         }).join('')
         : '<p class="em-empty">No custom starters yet.</p>';
 
+    const STAT_ORDER = { 'HR': 0, 'SLG': 1, 'OPS': 2 };
     const hotBatsList = [];
     hotHitters.forEach((players, teamNick) => {
         players.forEach(p => hotBatsList.push({ name: p.name, team: teamNick, stat: p.stat }));
+    });
+    hotBatsList.sort((a, b) => {
+        const suffixA = a.stat.split(' ').pop();
+        const suffixB = b.stat.split(' ').pop();
+        const orderDiff = (STAT_ORDER[suffixA] ?? 9) - (STAT_ORDER[suffixB] ?? 9);
+        if (orderDiff !== 0) return orderDiff;
+        return parseFloat(b.stat) - parseFloat(a.stat);
     });
     const hotBatsRows = hotBatsList.length
         ? hotBatsList.map(p => `
@@ -1536,9 +1544,17 @@ function renderElectricModal() {
             </thead>
             <tbody>${tableRows}</tbody>
         </table>
+        <div class="em-custom-section">
+            <div class="em-custom-title">Custom Starters</div>
+            <div id="custom-chips-list">${customChips}</div>
+            <div class="pitcher-search-wrap">
+                <input type="text" id="pitcher-search-input" placeholder="Search pitchers to add…" autocomplete="off">
+                <div id="pitcher-search-results" class="pitcher-dropdown" style="display:none"></div>
+            </div>
+        </div>
         <div class="em-hot-bats-section">
             <div class="settings-section-title">
-                <span class="material-icons" style="font-size:16px;color:var(--accent-blue);vertical-align:middle;margin-right:5px">local_fire_department</span>
+                <span class="material-icons" style="font-size:16px;color:#f97316;vertical-align:middle;margin-right:5px">local_fire_department</span>
                 Hot Bats
             </div>
             <table class="electric-modal-table">
@@ -1547,14 +1563,6 @@ function renderElectricModal() {
                 </thead>
                 <tbody>${hotBatsRows}</tbody>
             </table>
-        </div>
-        <div class="em-custom-section">
-            <div class="em-custom-title">Custom Starters</div>
-            <div id="custom-chips-list">${customChips}</div>
-            <div class="pitcher-search-wrap">
-                <input type="text" id="pitcher-search-input" placeholder="Search pitchers to add…" autocomplete="off">
-                <div id="pitcher-search-results" class="pitcher-dropdown" style="display:none"></div>
-            </div>
         </div>
         <div class="em-sharing-section">
             <div class="settings-section-title" style="margin-bottom:0.5rem">
