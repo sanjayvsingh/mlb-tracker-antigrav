@@ -1100,21 +1100,27 @@ function sportsnetToNickname(snName) {
 
 async function detectCanada() {
     if (cachedCountry !== null) return cachedCountry === 'CA';
-    try {
-        const geoRes = await fetch('ipinfo.php', {
-            headers: { 'X-CSRF-Token': window.CSRF_TOKEN },
-            signal: AbortSignal.timeout(3000)
-        });
-        if (!geoRes.ok) { cachedCountry = ''; return false; }
-        const geo = await geoRes.json();
-        cachedCountry = geo.country_code || '';
-        console.log(`[Geo] User detected in ${geo.country || cachedCountry}`);
-        return cachedCountry === 'CA';
-    } catch (e) {
-        cachedCountry = '';
-        console.warn('[Geo] Detection failed:', e.message);
-        return false;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+            const geoRes = await fetch('ipinfo.php', {
+                headers: { 'X-CSRF-Token': window.CSRF_TOKEN },
+                signal: AbortSignal.timeout(3000)
+            });
+            if (!geoRes.ok) { cachedCountry = ''; return false; }
+            const geo = await geoRes.json();
+            cachedCountry = geo.country_code || '';
+            console.log(`[Geo] User detected in ${geo.country || cachedCountry}`);
+            return cachedCountry === 'CA';
+        } catch (e) {
+            if (attempt < 2) {
+                console.warn('[Geo] Detection timed out, retrying...');
+            } else {
+                cachedCountry = '';
+                console.warn('[Geo] Detection failed:', e.message);
+            }
+        }
     }
+    return false;
 }
 
 async function fetchSportsnetGames() {
