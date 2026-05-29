@@ -330,7 +330,7 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
 .em-hot-bats-section { border-top: 1px solid var(--border-main); padding-top: 1rem; margin-top: 0.25rem; }
 .em-hot-bats-section .electric-modal-table thead th:last-child { text-align: right; }
 .em-hot-stat { text-align: right; color: #f97316; font-weight: 600; }
-.em-hot-extra { font-size: 0.68rem; color: #f97316; font-weight: 700; margin-left: 5px; opacity: 0.75; }
+.em-hot-extra { font-size: 0.68rem; color: #f97316; font-weight: 700; margin-left: 10px; opacity: 0.75; }
 
 /* CUSTOM STARTERS SECTION */
 .em-custom-section { border-top: 1px solid var(--border-main); padding-top: 1rem; }

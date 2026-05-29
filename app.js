@@ -1538,7 +1538,7 @@ function renderElectricModal() {
     const hotBatsRows = hotBatsList.length
         ? hotBatsList.map(p => {
             const extras = (p.extras || []).map(e =>
-                `<span class="em-hot-extra">+${e}</span>`
+                `<span class="em-hot-extra">${e}</span>`
             ).join('');
             return `
             <tr>
