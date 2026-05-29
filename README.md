@@ -40,7 +40,7 @@ The application integrates data from multiple real-time sources to calculate the
 - **Canadian Broadcaster Scraping**:
   - `sportsnet.php`: Parses live and upcoming MLB matchups from Sportsnet's internal schedule API. Fetches up to 4 dates in parallel using `curl_multi` and caches results for 4 hours.
   - `tsn.php`: Parses the season-long MLB on TSN schedule from TSN's website. Caches results for 24 hours.
-  - Both are geo-gated: a single `detectCanada()` call (cached in memory) runs before either fetch. If the user is not in Canada, both are skipped. Fails closed — if geo-detection is unavailable, both are skipped. Geo-detection is handled server-side by `ipinfo.php`, which proxies the client's IP to the ipinfo.io `/lite` API using a Bearer token stored in `ipinfo_token.php`.
+  - Both are geo-gated: a single `detectCanada()` call (cached in memory) runs before either fetch. If the user is not in Canada, both are skipped. Fails closed — if geo-detection is unavailable, both are skipped. Geo-detection is handled server-side by `ipinfo.php`, which resolves the client's real IP (including CDN-forwarded requests) and proxies it to the ipinfo.io `/lite` API using a Bearer token stored in `config.php`.
 
 - **MLB Network Scraping**:
   - `mlbnetwork.php`: A backend scraper that fetches and parses the MLB Network live games schedule from `mlb.com`. Extracts game matchups, dates, and times and caches results for 24 hours. Games broadcast on MLB Network are surfaced as Featured Broadcasts in the UI.
@@ -67,7 +67,7 @@ You can customize the application state using the following parameters:
 ## 🛠️ Tech Stack
 
 - **Frontend**: Vanilla HTML5, JavaScript (ES6+), CSS3.
-- **Backend Proxy**: PHP (`index.php` for session/CSRF token seeding; `gemini.php`, `sportsnet.php`, `tsn.php`, `mlbnetwork.php`, `electric.php`, `pitchers.php` for proxying external APIs; `token.php` as a shared auth helper). PowerShell (`server.ps1`) for local development.
+- **Backend Proxy**: PHP (`index.php` for session/CSRF token seeding; `gemini.php`, `sportsnet.php`, `tsn.php`, `mlbnetwork.php`, `electric.php`, `pitchers.php`, `sheet.php`, `ipinfo.php` for proxying external APIs; `token.php` as a shared auth helper; `config.php` for centralized secrets — gitignored, never committed). PowerShell (`server.ps1`) for local development.
 - **Data Source**: MLB Stats API, Google Gemini API.
 - **Icons**: [Material Icons](https://fonts.google.com/icons)
 
@@ -79,7 +79,8 @@ The backend proxy scripts include several layers of security to prevent unauthor
 - **Secure Session Cookies**: PHP sessions use `secure`, `httponly`, and `SameSite=Lax` cookie parameters. `Lax` (rather than `Strict`) is used so that shared links work correctly on first click from an external page.
 - **Origin Validation**: All proxy scripts validate the `Origin` header and only set CORS headers for `mlb.sanvash.com` or local development environments.
 - **Geo-Gated Canadian Broadcasters**: Sportsnet and TSN broadcasts are only surfaced to confirmed Canadian users. A single geo-detection call is shared between both fetches (result cached in memory) so the IP lookup only fires once per page load. The check is fail-closed — if detection fails for any reason, both Canadian broadcaster fetches are skipped entirely.
-- **HTTP Security Headers** (via `.htaccess`): `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, `Referrer-Policy`, and `Content-Security-Policy` are set on every response. Direct HTTP access to cache `.json` files is also blocked at the Apache layer.
+- **Centralized Secrets**: All API keys and tokens (`gemini_api_key`, `sheet_id`, `ipinfo_token`) are stored in a single `config.php` file. It is gitignored and never committed to the repository. Each proxy script loads its key from this file with a safe fallback if the file is absent.
+- **HTTP Security Headers** (via `.htaccess`): `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security`, `Referrer-Policy`, and a strict `Content-Security-Policy` are set on every response. Direct HTTP access to `config.php`, legacy secret files, and cache `.json` files is blocked at the Apache layer — so even if PHP were misconfigured, those files could never be served as plaintext.
 - **Stale Cache Fallback**: If an external API call fails on a cold server load, `gemini.php`, `sportsnet.php`, and `mlbnetwork.php` automatically fall back to the most recent cached response rather than returning an error. The client logs a `console.warn` when stale data is being served. `sheet.php` has no cache — the owner's Google Sheet is always fetched live so team updates are reflected immediately.
 
 ## 🎯 Goal

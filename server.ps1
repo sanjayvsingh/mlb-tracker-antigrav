@@ -77,19 +77,20 @@ try {
                     $response.ContentLength64 = $content.Length
                     $response.OutputStream.Write($content, 0, $content.Length)
                 } else {
-                    $keyFile = Join-Path $PSScriptRoot "api_key.php"
-                    if (-not (Test-Path $keyFile)) {
-                        $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error": "API key file api_key.php not found for local testing."}')
+                    $configFile = Join-Path $PSScriptRoot "config.php"
+                    $geminiApiKey = ""
+                    if (Test-Path $configFile) {
+                        $configContent = Get-Content $configFile -Raw
+                        if ($configContent -match "'gemini_api_key'\s*=>\s*'([^']+)'") {
+                            $geminiApiKey = $matches[1]
+                        }
+                    }
+                    if (-not $geminiApiKey) {
+                        $errorBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error": "Gemini API key not found in config.php"}')
                         $response.StatusCode = 500
                         $response.ContentLength64 = $errorBytes.Length
                         $response.OutputStream.Write($errorBytes, 0, $errorBytes.Length)
                     } else {
-                        $keyContent = Get-Content $keyFile | Out-String
-                        $geminiApiKey = ""
-                        if ($keyContent -match 'return\s+["'']([^"'']+)["'']') {
-                            $geminiApiKey = $matches[1]
-                        }
-                        
                         $teamCtx = @{}
                         if ($inputObj.teamContext) {
                             $inputObj.teamContext.PSObject.Properties | ForEach-Object {
@@ -844,6 +845,108 @@ try {
                         $response.ContentLength64 = $eb.Length
                         $response.OutputStream.Write($eb, 0, $eb.Length)
                     }
+                }
+                $response.Close()
+                continue
+            }
+
+            # IP geolocation endpoint
+            if ($localPath -eq 'ipinfo.php' -and $context.Request.HttpMethod -eq 'GET') {
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                $response.ContentType = "application/json"
+
+                try {
+                    $configFile = Join-Path $PSScriptRoot "config.php"
+                    $ipinfoToken = ""
+                    if (Test-Path $configFile) {
+                        $configContent = Get-Content $configFile -Raw
+                        if ($configContent -match "'ipinfo_token'\s*=>\s*'([^']+)'") {
+                            $ipinfoToken = $matches[1]
+                        }
+                    }
+
+                    if (-not $ipinfoToken -or $ipinfoToken -eq 'YOUR_IPINFO_TOKEN_HERE') {
+                        $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"ipinfo token not configured in config.php"}')
+                        $response.StatusCode = 500
+                        $response.ContentLength64 = $errBytes.Length
+                        $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                    } else {
+                        $clientIp = $context.Request.RemoteEndPoint.Address.ToString()
+                        $ipinfoUrl = if ($clientIp -eq '127.0.0.1' -or $clientIp -eq '::1') {
+                            "https://api.ipinfo.io/lite/me"
+                        } else {
+                            "https://api.ipinfo.io/lite/$clientIp"
+                        }
+                        Write-Host "Geo lookup: $ipinfoUrl"
+                        $geoResp = Invoke-RestMethod -Uri $ipinfoUrl -Headers @{ Authorization = "Bearer $ipinfoToken" } -TimeoutSec 5
+                        $geoJson = ConvertTo-Json $geoResp -Compress
+                        $geoBytes = [System.Text.Encoding]::UTF8.GetBytes($geoJson)
+                        $response.ContentLength64 = $geoBytes.Length
+                        $response.OutputStream.Write($geoBytes, 0, $geoBytes.Length)
+                        Write-Host "Geo: $($geoResp.country) ($($geoResp.country_code))"
+                    }
+                } catch {
+                    Write-Host "ipinfo fetch failed: $($_.Exception.Message)"
+                    $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"geo detection failed"}')
+                    $response.StatusCode = 502
+                    $response.ContentLength64 = $errBytes.Length
+                    $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                }
+                $response.Close()
+                continue
+            }
+
+            # Unseen teams sheet endpoint
+            if ($localPath -eq 'sheet.php' -and $context.Request.HttpMethod -eq 'GET') {
+                $origin = $context.Request.Headers["Origin"]
+                if ($origin -match "http://localhost:8000|http://127.0.0.1:8000|https://mlb.sanvash.com") {
+                    $response.AddHeader("Access-Control-Allow-Origin", $origin)
+                }
+                $response.ContentType = "application/json"
+
+                try {
+                    $configFile = Join-Path $PSScriptRoot "config.php"
+                    $sheetId = ""
+                    if (Test-Path $configFile) {
+                        $configContent = Get-Content $configFile -Raw
+                        if ($configContent -match "'sheet_id'\s*=>\s*'([^']+)'") {
+                            $sheetId = $matches[1]
+                        }
+                    }
+
+                    if (-not $sheetId) {
+                        $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Sheet ID not configured in config.php"}')
+                        $response.StatusCode = 500
+                        $response.ContentLength64 = $errBytes.Length
+                        $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+                    } else {
+                        Write-Host "Fetching Google Sheet..."
+                        $sheetUrl = "https://docs.google.com/spreadsheets/d/$sheetId/export?format=csv"
+                        $csv = (Invoke-WebRequest -Uri $sheetUrl -UseBasicParsing -TimeoutSec 10 -UserAgent "Mozilla/5.0").Content
+                        $lines = $csv -split "`n" | Select-Object -Skip 1
+                        $teams = @()
+                        foreach ($line in $lines) {
+                            $line = $line.Trim()
+                            if (-not $line) { continue }
+                            $cols = $line -split ','
+                            if ($cols.Count -gt 13 -and $cols[13].Trim().Trim('"') -ne '') {
+                                $teams += $cols[13].Trim().Trim('"')
+                            }
+                        }
+                        $result = [System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json @{ teams = $teams } -Compress))
+                        $response.ContentLength64 = $result.Length
+                        $response.OutputStream.Write($result, 0, $result.Length)
+                        Write-Host "Sheet: $($teams.Count) unseen teams"
+                    }
+                } catch {
+                    Write-Host "Sheet fetch failed: $($_.Exception.Message)"
+                    $errBytes = [System.Text.Encoding]::UTF8.GetBytes('{"error":"Failed to fetch sheet","teams":[]}')
+                    $response.StatusCode = 502
+                    $response.ContentLength64 = $errBytes.Length
+                    $response.OutputStream.Write($errBytes, 0, $errBytes.Length)
                 }
                 $response.Close()
                 continue
