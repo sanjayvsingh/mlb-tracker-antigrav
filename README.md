@@ -40,7 +40,7 @@ The application integrates data from multiple real-time sources to calculate the
 - **Canadian Broadcaster Scraping**:
   - `sportsnet.php`: Parses live and upcoming MLB matchups from Sportsnet's internal schedule API. Fetches up to 4 dates in parallel using `curl_multi` and caches results for 4 hours.
   - `tsn.php`: Parses the season-long MLB on TSN schedule from TSN's website. Caches results for 24 hours.
-  - Both are geo-gated: a single `detectCanada()` call (cached in memory) runs before either fetch. If the user is not in Canada, both are skipped. Fails closed — if geo-detection is unavailable, both are skipped.
+  - Both are geo-gated: a single `detectCanada()` call (cached in memory) runs before either fetch. If the user is not in Canada, both are skipped. Fails closed — if geo-detection is unavailable, both are skipped. Geo-detection is handled server-side by `ipinfo.php`, which proxies the client's IP to the ipinfo.io `/lite` API using a Bearer token stored in `ipinfo_token.php`.
 
 - **MLB Network Scraping**:
   - `mlbnetwork.php`: A backend scraper that fetches and parses the MLB Network live games schedule from `mlb.com`. Extracts game matchups, dates, and times and caches results for 24 hours. Games broadcast on MLB Network are surfaced as Featured Broadcasts in the UI.

@@ -1101,11 +1101,14 @@ function sportsnetToNickname(snName) {
 async function detectCanada() {
     if (cachedCountry !== null) return cachedCountry === 'CA';
     try {
-        const geoRes = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(3000) });
+        const geoRes = await fetch('ipinfo.php', {
+            headers: { 'X-CSRF-Token': window.CSRF_TOKEN },
+            signal: AbortSignal.timeout(3000)
+        });
         if (!geoRes.ok) { cachedCountry = ''; return false; }
         const geo = await geoRes.json();
-        cachedCountry = geo.country_code || geo.country || '';
-        console.log(`[Geo] User detected in ${geo.country_name || cachedCountry}`);
+        cachedCountry = geo.country_code || '';
+        console.log(`[Geo] User detected in ${geo.country || cachedCountry}`);
         return cachedCountry === 'CA';
     } catch (e) {
         cachedCountry = '';
