@@ -1,11 +1,8 @@
 <?php
 // ipinfo.php - IP geolocation proxy using ipinfo.io/lite
 
-if (file_exists('ipinfo_token.php')) {
-    $ipinfo_token = require 'ipinfo_token.php';
-} else {
-    $ipinfo_token = 'YOUR_IPINFO_TOKEN_HERE';
-}
+$config = file_exists('config.php') ? require 'config.php' : [];
+$ipinfo_token = $config['ipinfo_token'] ?? 'YOUR_IPINFO_TOKEN_HERE';
 
 require_once 'token.php';
 

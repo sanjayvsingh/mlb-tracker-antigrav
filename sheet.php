@@ -28,11 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 csrf_verify();
 
-if (file_exists('sheet_id.php')) {
-    $sheetId = require 'sheet_id.php';
-} else {
-    $sheetId = getenv('SHEET_ID');
-}
+$config = file_exists('config.php') ? require 'config.php' : [];
+$sheetId = $config['sheet_id'] ?? getenv('SHEET_ID');
 
 if (!$sheetId) {
     http_response_code(500);

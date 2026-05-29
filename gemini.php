@@ -8,12 +8,8 @@ function ordinal($n) {
     return $n . ($s[($v - 20) % 10] ?? $s[$v] ?? $s[0]);
 }
 
-if (file_exists('api_key.php')) {
-    $gemini_api_key = require 'api_key.php';
-} else {
-    // Set this to your actual Gemini API key before uploading to your web host
-    $gemini_api_key = "YOUR_API_KEY_HERE";
-}
+$config = file_exists('config.php') ? require 'config.php' : [];
+$gemini_api_key = $config['gemini_api_key'] ?? 'YOUR_API_KEY_HERE';
 
 require_once 'token.php';
 

@@ -16,7 +16,9 @@ Thumbs.db
 *.txt
 sheet.csv
 
+config.php
 api_key.php
 sheet_id.php
+ipinfo_token.php
 
 *.zip
