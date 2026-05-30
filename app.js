@@ -796,7 +796,7 @@ function renderGames() {
     // Apply filters
     const filtered = list.filter(g => {
         if (g.date < oneHourAgo) return false;
-        if (g.isBananaBall) return true; // bypass MLB-specific filters
+        if (g.isBananaBall) return !filters.funGames && !filters.bothUnseen && !filters.featured && !filters.electric && !filters.showcase;
         if (filters.bothUnseen && !g.bothUnseen) return false;
         if (filters.featured && g.featuredNetworks.length === 0) return false;
         if (filters.electric && !g.anyElectric) return false;
