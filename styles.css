@@ -475,7 +475,9 @@ body { background-color: var(--bg-dark); color: var(--text-primary); min-height:
     .metrics-shelf {
         grid-template-columns: repeat(2, 1fr);
     }
-    .metrics-shelf .metric-card:nth-child(3),
+    .metrics-shelf .metric-card:nth-child(1) {
+        grid-column: 1 / -1;
+    }
     .metrics-shelf .metric-card:nth-child(4) {
         display: none;
     }
